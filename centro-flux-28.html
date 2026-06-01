@@ -1,0 +1,1645 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CentrO-Flux · Intelligence Routière 28 — Macro-simulation du trafic (Eure-et-Loir)</title>
+
+<!-- ============================= CDN ============================= -->
+<!-- Leaflet (cartographie) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Chart.js (analytics) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<!-- FontAwesome (icônes) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<!-- Typographie -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+<style>
+/* ============================= THÈME / VARIABLES ============================= */
+:root{
+  --bg-0:#070b14;          /* fond le plus profond */
+  --bg-1:#0b1120;          /* fond panneaux */
+  --bg-2:#111a2e;
+  --glass:rgba(20,30,52,.62);
+  --glass-strong:rgba(15,23,42,.86);
+  --stroke:rgba(148,180,255,.12);
+  --stroke-strong:rgba(148,180,255,.22);
+  --txt-0:#eaf1ff;
+  --txt-1:#aab8d6;
+  --txt-2:#6b7a9c;
+  --accent:#38bdf8;        /* cyan */
+  --accent-2:#818cf8;      /* indigo */
+  --accent-3:#22d3ee;
+  --ok:#22c55e;
+  --dense:#f59e0b;
+  --cong:#ef4444;
+  --asphyx:#a21caf;
+  --shadow:0 18px 50px -18px rgba(0,0,0,.75);
+  --radius:16px;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family:"Inter",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  color:var(--txt-0);
+  background:
+    radial-gradient(1200px 700px at 12% -8%, rgba(56,189,248,.10), transparent 60%),
+    radial-gradient(1000px 600px at 96% 0%, rgba(129,140,248,.12), transparent 55%),
+    radial-gradient(900px 700px at 50% 120%, rgba(34,211,238,.06), transparent 60%),
+    var(--bg-0);
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:rgba(120,150,210,.22);border-radius:10px;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:rgba(120,150,210,.4);background-clip:padding-box}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ============================= LAYOUT GÉNÉRAL ============================= */
+.app{display:grid;grid-template-rows:auto 1fr;height:100vh;width:100vw}
+
+header.topbar{
+  display:flex;align-items:center;gap:18px;
+  padding:12px 20px;
+  background:linear-gradient(180deg, rgba(13,20,38,.92), rgba(9,14,26,.78));
+  border-bottom:1px solid var(--stroke);
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+  z-index:600;
+}
+.brand{display:flex;align-items:center;gap:13px;min-width:max-content}
+.brand .logo{
+  width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:20px;color:#04121f;
+  background:linear-gradient(135deg,var(--accent),var(--accent-2));
+  box-shadow:0 8px 22px -6px rgba(56,189,248,.6);
+}
+.brand h1{font-size:16px;margin:0;letter-spacing:.2px;font-weight:800}
+.brand .sub{font-size:11px;color:var(--txt-2);font-weight:600;letter-spacing:1.4px;text-transform:uppercase}
+
+/* Bandeau KPI dans le header */
+.kpi-strip{display:flex;gap:10px;margin-left:6px;flex:1;overflow:hidden}
+.kpi{
+  flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;
+  padding:8px 13px;border-radius:13px;border:1px solid var(--stroke);
+  background:var(--glass);backdrop-filter:blur(8px);position:relative;overflow:hidden;
+}
+.kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent)}
+.kpi.k-speed::before{background:var(--ok)}
+.kpi.k-delay::before{background:var(--dense)}
+.kpi.k-co2::before{background:#f472b6}
+.kpi.k-flow::before{background:var(--accent)}
+.kpi.k-sat::before{background:var(--cong)}
+.kpi .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--txt-2);font-weight:700;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.kpi .val{font-family:var(--mono);font-size:18px;font-weight:700;line-height:1;white-space:nowrap}
+.kpi .val small{font-size:11px;color:var(--txt-1);font-weight:500}
+.kpi .trend{font-size:10px;color:var(--txt-2);white-space:nowrap}
+
+.topbtns{display:flex;gap:8px}
+.btn{
+  border:1px solid var(--stroke-strong);background:var(--glass);color:var(--txt-0);
+  padding:9px 14px;border-radius:11px;font-size:13px;font-weight:600;cursor:pointer;
+  display:inline-flex;align-items:center;gap:8px;transition:.18s;backdrop-filter:blur(8px);
+}
+.btn:hover{border-color:var(--accent);color:#fff;transform:translateY(-1px);box-shadow:0 8px 20px -10px rgba(56,189,248,.6)}
+.btn:active{transform:translateY(0)}
+.btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#04121f;border:none}
+.btn.ghost{background:transparent}
+.btn.icon{padding:9px 11px}
+
+/* Corps : 3 colonnes */
+.body{display:grid;grid-template-columns:340px 1fr 396px;height:100%;min-height:0}
+@media (max-width:1500px){.body{grid-template-columns:312px 1fr 360px}}
+
+.col{min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.col.left{border-right:1px solid var(--stroke)}
+.col.right{border-left:1px solid var(--stroke)}
+.col-scroll{overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+
+/* Carte centrale */
+.col.center{position:relative}
+#map{position:absolute;inset:0;background:#070b14}
+.leaflet-container{background:#070b14;font-family:inherit}
+.map-overlay{position:absolute;z-index:500;pointer-events:none}
+.map-overlay > *{pointer-events:auto}
+
+/* Panneau (glass card) */
+.panel{
+  background:var(--glass);border:1px solid var(--stroke);border-radius:var(--radius);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:var(--shadow);
+  overflow:hidden;
+}
+.panel > .ph{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:13px 15px;border-bottom:1px solid var(--stroke);
+  background:linear-gradient(180deg,rgba(255,255,255,.03),transparent);
+}
+.panel > .ph .t{display:flex;align-items:center;gap:9px;font-weight:700;font-size:13.5px}
+.panel > .ph .t i{color:var(--accent);width:16px;text-align:center}
+.panel > .ph .x{font-size:11px;color:var(--txt-2);font-weight:600}
+.panel .pb{padding:15px}
+
+/* Contrôles */
+.ctrl{margin-bottom:17px}
+.ctrl:last-child{margin-bottom:0}
+.ctrl .row{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+.ctrl label{font-size:12.5px;font-weight:600;color:var(--txt-1);display:flex;align-items:center;gap:7px}
+.ctrl label i{color:var(--accent-2);font-size:12px;width:14px;text-align:center}
+.ctrl .v{font-family:var(--mono);font-size:13px;font-weight:700;color:#fff;background:rgba(56,189,248,.12);padding:2px 9px;border-radius:7px;border:1px solid rgba(56,189,248,.2)}
+
+input[type=range]{
+  -webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:10px;outline:none;cursor:pointer;
+  background:linear-gradient(90deg,var(--accent) 0%,var(--accent) var(--p,50%),rgba(148,180,255,.14) var(--p,50%),rgba(148,180,255,.14) 100%);
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:50%;
+  background:#fff;border:3px solid var(--accent);box-shadow:0 2px 8px rgba(0,0,0,.5);transition:.12s;
+}
+input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.18);box-shadow:0 0 0 6px rgba(56,189,248,.18)}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid var(--accent);cursor:pointer}
+.scale{display:flex;justify-content:space-between;font-size:9.5px;color:var(--txt-2);margin-top:5px;font-family:var(--mono)}
+
+/* Segmented control */
+.seg{display:flex;gap:5px;background:rgba(8,13,24,.6);padding:5px;border-radius:11px;border:1px solid var(--stroke)}
+.seg button{
+  flex:1;border:none;background:transparent;color:var(--txt-1);padding:8px 6px;border-radius:8px;
+  font-size:11.5px;font-weight:600;cursor:pointer;transition:.15s;display:flex;flex-direction:column;align-items:center;gap:3px;
+}
+.seg button i{font-size:14px}
+.seg button.on{background:linear-gradient(135deg,rgba(56,189,248,.22),rgba(129,140,248,.22));color:#fff;box-shadow:inset 0 0 0 1px rgba(56,189,248,.35)}
+.seg button:hover:not(.on){color:#fff;background:rgba(148,180,255,.06)}
+
+/* Boutons de transport (lecture) */
+.transport{display:grid;grid-template-columns:auto 1fr auto;gap:9px;align-items:center}
+.bigbtn{
+  width:48px;height:48px;border-radius:14px;border:none;cursor:pointer;font-size:18px;
+  background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#04121f;
+  display:grid;place-items:center;box-shadow:0 10px 24px -10px rgba(56,189,248,.7);transition:.16s;
+}
+.bigbtn:hover{transform:translateY(-2px) scale(1.03)}
+.bigbtn.sec{background:var(--glass);color:var(--txt-0);border:1px solid var(--stroke-strong);box-shadow:none;width:48px}
+
+/* KPI mini cards (colonne droite) */
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mini{
+  border:1px solid var(--stroke);border-radius:13px;padding:12px;background:rgba(10,16,30,.5);position:relative;overflow:hidden
+}
+.mini .mt{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--txt-2);font-weight:700;margin-bottom:5px;display:flex;gap:6px;align-items:center}
+.mini .mv{font-family:var(--mono);font-size:20px;font-weight:700}
+.mini .mu{font-size:11px;color:var(--txt-1);font-weight:500}
+.mini i.bgi{position:absolute;right:-6px;bottom:-8px;font-size:46px;opacity:.06}
+
+/* Charts */
+.chart-wrap{position:relative;width:100%}
+.chart-wrap.h-line{height:148px}
+.chart-wrap.h-bar{height:150px}
+.chart-wrap.h-dough{height:168px}
+
+/* Flux d'événements */
+.events{display:flex;flex-direction:column;gap:8px;max-height:230px;overflow-y:auto;padding-right:4px}
+.ev{
+  display:flex;gap:10px;padding:9px 11px;border-radius:11px;font-size:12px;line-height:1.4;
+  border:1px solid var(--stroke);background:rgba(10,16,30,.5);animation:evin .35s ease;
+}
+@keyframes evin{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
+.ev i{margin-top:1px}
+.ev .et{font-family:var(--mono);font-size:10px;color:var(--txt-2);font-weight:700}
+.ev.warn{border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.08)}
+.ev.warn i{color:var(--dense)}
+.ev.crit{border-color:rgba(239,68,68,.45);background:rgba(239,68,68,.1)}
+.ev.crit i{color:var(--cong)}
+.ev.asphyx{border-color:rgba(162,28,175,.5);background:rgba(162,28,175,.13)}
+.ev.asphyx i{color:#e879f9}
+.ev.info i{color:var(--accent)}
+.ev.ok i{color:var(--ok)}
+.ev b{color:#fff;font-weight:700}
+
+/* Légende carte */
+.legend{
+  background:var(--glass-strong);border:1px solid var(--stroke);border-radius:13px;padding:11px 13px;
+  backdrop-filter:blur(10px);font-size:11.5px;min-width:174px;box-shadow:var(--shadow);
+}
+.legend .lh{font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--txt-1);margin-bottom:8px}
+.legend .li{display:flex;align-items:center;gap:9px;margin:5px 0;color:var(--txt-1)}
+.legend .sw{width:22px;height:5px;border-radius:3px;flex-shrink:0}
+.legend .nd{width:11px;height:11px;border-radius:50%;border:2px solid #fff;flex-shrink:0}
+
+/* Horloge / contexte carte */
+.mapclock{
+  background:var(--glass-strong);border:1px solid var(--stroke);border-radius:13px;padding:10px 15px;
+  backdrop-filter:blur(10px);box-shadow:var(--shadow);display:flex;align-items:center;gap:13px;
+}
+.mapclock .hh{font-family:var(--mono);font-size:25px;font-weight:700;letter-spacing:1px}
+.mapclock .ph{font-size:11px;color:var(--txt-1);font-weight:600}
+.mapclock .dot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok)}
+.mapclock .dot.run{animation:pulse 1.1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* Badge live */
+.livebadge{display:inline-flex;align-items:center;gap:7px;font-size:10.5px;font-weight:700;color:var(--ok);
+  background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);padding:4px 10px;border-radius:20px}
+.livebadge .d{width:7px;height:7px;border-radius:50%;background:var(--ok);animation:pulse 1.1s infinite}
+
+/* Toasts */
+#toasts{position:fixed;top:74px;right:18px;z-index:9999;display:flex;flex-direction:column;gap:10px;max-width:340px}
+.toast{
+  display:flex;gap:11px;align-items:flex-start;padding:12px 15px;border-radius:13px;
+  background:var(--glass-strong);border:1px solid var(--stroke-strong);box-shadow:var(--shadow);
+  backdrop-filter:blur(14px);animation:tin .3s cubic-bezier(.2,.8,.2,1);font-size:13px;
+}
+.toast.out{animation:tout .3s forwards}
+@keyframes tin{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:none}}
+@keyframes tout{to{opacity:0;transform:translateX(40px)}}
+.toast i{font-size:16px;margin-top:1px}
+.toast .tt{font-weight:700;margin-bottom:2px}
+.toast .tm{color:var(--txt-1);font-size:12px;line-height:1.4}
+.toast.ok i{color:var(--ok)} .toast.warn i{color:var(--dense)}
+.toast.err i{color:var(--cong)} .toast.info i{color:var(--accent)}
+
+/* Tooltip Leaflet sombre */
+.leaflet-popup-content-wrapper{background:var(--glass-strong);color:var(--txt-0);border:1px solid var(--stroke-strong);
+  border-radius:13px;backdrop-filter:blur(14px);box-shadow:var(--shadow)}
+.leaflet-popup-tip{background:var(--glass-strong)}
+.leaflet-popup-content{margin:13px 15px;font-size:12.5px;line-height:1.55}
+.leaflet-popup-content b{color:#fff}
+.popup-h{font-weight:800;font-size:13.5px;margin-bottom:7px;display:flex;align-items:center;gap:7px}
+.popup-grid{display:grid;grid-template-columns:auto auto;gap:3px 14px;font-family:var(--mono);font-size:11.5px}
+.popup-grid .k{color:var(--txt-2)}
+.popup-grid .v{color:#fff;text-align:right;font-weight:700}
+.cat-pill{font-size:9.5px;font-weight:800;padding:2px 7px;border-radius:6px;letter-spacing:.5px}
+.cat-A{background:rgba(56,189,248,.2);color:#7dd3fc}
+.cat-N{background:rgba(129,140,248,.2);color:#a5b4fc}
+.cat-D{background:rgba(148,163,184,.2);color:#cbd5e1}
+.leaflet-bar a,.leaflet-control-zoom a{background:var(--glass-strong)!important;color:var(--txt-0)!important;border-color:var(--stroke)!important}
+.leaflet-bar a:hover{background:var(--bg-2)!important}
+.leaflet-control-attribution{background:rgba(8,13,24,.7)!important;color:var(--txt-2)!important}
+.leaflet-control-attribution a{color:var(--accent)!important}
+
+/* Marqueurs nœuds */
+.node-label{
+  font-family:"Inter";font-weight:700;font-size:11px;color:#eaf1ff;text-shadow:0 1px 4px #000,0 0 8px #000;
+  background:none;border:none;white-space:nowrap;pointer-events:none;
+}
+.node-label.porte{color:#fbbf24}
+
+/* Mini-infobulle de survol des routes (tooltip Leaflet) */
+.leaflet-tooltip.road-tip{
+  background:var(--glass-strong);border:1px solid var(--stroke-strong);border-radius:10px;
+  color:var(--txt-0);box-shadow:var(--shadow);backdrop-filter:blur(12px);padding:8px 11px;
+  font-family:"Inter";font-size:12px;line-height:1.45;white-space:nowrap;
+}
+.leaflet-tooltip.road-tip::before{display:none}      /* masque la flèche par défaut */
+.road-tip .rt-name{font-weight:700;color:#fff;margin-bottom:3px;display:flex;align-items:center;gap:6px}
+.road-tip .rt-row{display:flex;align-items:center;gap:7px;color:var(--txt-1);font-family:var(--mono);font-size:11px}
+.road-tip .rt-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;box-shadow:0 0 8px currentColor}
+
+/* Bouton de repli (panneau rétractable) */
+.collapse-btn{border:1px solid var(--stroke);background:var(--glass);color:var(--txt-1);
+  width:27px;height:24px;border-radius:7px;cursor:pointer;font-size:11px;transition:.18s;display:grid;place-items:center}
+.collapse-btn:hover{color:#fff;border-color:var(--accent)}
+.collapse-btn i{transition:transform .25s}
+.panel.collapsed .collapse-btn i{transform:rotate(180deg)}
+.panel.collapsed .pb{display:none}
+.panel.collapsed .ph{border-bottom:none}
+/* Quand le flux est replié, les 3 graphiques gagnent de la hauteur */
+.col-scroll.events-collapsed .chart-wrap.h-line{height:200px}
+.col-scroll.events-collapsed .chart-wrap.h-bar{height:190px}
+.col-scroll.events-collapsed .chart-wrap.h-dough{height:200px}
+
+/* Modal méthodologie */
+.modal-bg{position:fixed;inset:0;z-index:9000;background:rgba(3,6,14,.72);backdrop-filter:blur(6px);
+  display:none;align-items:center;justify-content:center;padding:24px;animation:tin .25s}
+.modal-bg.show{display:flex}
+.modal{max-width:860px;width:100%;max-height:88vh;overflow-y:auto}
+.modal .pb{padding:22px 26px;font-size:13.5px;line-height:1.7;color:var(--txt-1)}
+.modal h3{color:#fff;font-size:15px;margin:20px 0 9px;display:flex;align-items:center;gap:9px}
+.modal h3:first-child{margin-top:0}
+.modal h3 i{color:var(--accent)}
+.modal code,.modal .formula{font-family:var(--mono);background:rgba(8,13,24,.7);border:1px solid var(--stroke);
+  border-radius:8px;color:#7dd3fc}
+.modal code{padding:1px 6px;font-size:12px}
+.modal .formula{display:block;padding:13px 16px;margin:11px 0;color:#eaf1ff;font-size:13.5px;overflow-x:auto}
+.modal ul{margin:8px 0;padding-left:20px}
+.modal li{margin:5px 0}
+.modal .src{font-size:12px;color:var(--txt-2);border-top:1px solid var(--stroke);padding-top:14px;margin-top:18px}
+.tag{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:6px;background:rgba(56,189,248,.14);color:#7dd3fc;margin-right:5px}
+table.meta{width:100%;border-collapse:collapse;font-size:12px;margin:10px 0}
+table.meta th,table.meta td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--stroke)}
+table.meta th{color:var(--txt-2);font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:.5px}
+table.meta td{font-family:var(--mono);color:var(--txt-0)}
+
+.section-title{font-size:10.5px;text-transform:uppercase;letter-spacing:1.2px;color:var(--txt-2);font-weight:800;
+  margin:2px 0 -2px;display:flex;align-items:center;gap:8px}
+.section-title::after{content:"";flex:1;height:1px;background:var(--stroke)}
+
+.hint{font-size:11px;color:var(--txt-2);line-height:1.45;margin-top:7px;display:flex;gap:7px}
+.hint i{color:var(--accent-2);margin-top:2px}
+
+.flash{animation:flashk .6s}
+@keyframes flashk{0%{background:rgba(56,189,248,.18)}100%{background:transparent}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ============================= HEADER + KPI ============================= -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo"><i class="fa-solid fa-traffic-light"></i></div>
+      <div>
+        <h1>CentrO-Flux</h1>
+        <div class="sub">Intelligence Routière · 28</div>
+      </div>
+    </div>
+
+    <div class="kpi-strip">
+      <div class="kpi k-speed">
+        <div class="lbl"><i class="fa-solid fa-gauge-high"></i>Vitesse moy. réseau</div>
+        <div class="val" id="kpiSpeed">— <small>km/h</small></div>
+        <div class="trend" id="kpiSpeedT">flux libre théorique : — km/h</div>
+      </div>
+      <div class="kpi k-delay">
+        <div class="lbl"><i class="fa-solid fa-hourglass-half"></i>Temps perdu</div>
+        <div class="val" id="kpiDelay">— <small>véh·h/h</small></div>
+        <div class="trend" id="kpiDelayT">soit — min / conducteur</div>
+      </div>
+      <div class="kpi k-flow">
+        <div class="lbl"><i class="fa-solid fa-car"></i>Débit global</div>
+        <div class="val" id="kpiFlow">— <small>véh/h</small></div>
+        <div class="trend" id="kpiFlowT">parcours : — véh·km/h</div>
+      </div>
+      <div class="kpi k-co2">
+        <div class="lbl"><i class="fa-solid fa-smog"></i>Émissions CO₂</div>
+        <div class="val" id="kpiCo2">— <small>kg/h</small></div>
+        <div class="trend" id="kpiCo2T">≈ — g/véh·km</div>
+      </div>
+      <div class="kpi k-sat">
+        <div class="lbl"><i class="fa-solid fa-road-circle-exclamation"></i>Réseau saturé</div>
+        <div class="val" id="kpiSat">— <small>km</small></div>
+        <div class="trend" id="kpiSatT">— % des voies</div>
+      </div>
+    </div>
+
+    <div class="topbtns">
+      <button class="btn ghost icon" id="btnMethodo" title="Méthodologie & sources"><i class="fa-solid fa-flask"></i></button>
+      <button class="btn ghost icon" id="btnReset" title="Réinitialiser les paramètres"><i class="fa-solid fa-rotate-left"></i></button>
+    </div>
+  </header>
+
+  <div class="body">
+
+    <!-- ============================= COLONNE GAUCHE : CONFIG ============================= -->
+    <section class="col left">
+      <div class="col-scroll">
+
+        <div class="section-title"><i class="fa-solid fa-sliders"></i> Configuration de la simulation</div>
+
+        <!-- Profil temporel + lecture -->
+        <div class="panel">
+          <div class="ph"><div class="t"><i class="fa-solid fa-clock"></i>Profil temporel</div><div class="x" id="periodTag">—</div></div>
+          <div class="pb">
+            <div class="ctrl">
+              <div class="row">
+                <label><i class="fa-regular fa-clock"></i>Heure de la journée</label>
+                <span class="v" id="hourV">08:00</span>
+              </div>
+              <input type="range" id="hour" min="0" max="23.5" step="0.5" value="8" />
+              <div class="scale"><span>00h</span><span>06h</span><span>12h</span><span>18h</span><span>23h</span></div>
+            </div>
+            <div class="transport">
+              <button class="bigbtn" id="btnPlay" title="Lecture temps réel"><i class="fa-solid fa-play"></i></button>
+              <div>
+                <div style="font-size:11.5px;font-weight:700;color:var(--txt-1)">Simulation dynamique</div>
+                <div style="font-size:10.5px;color:var(--txt-2)" id="playInfo">Défilement des 24h — pas&nbsp;: 30&nbsp;min</div>
+              </div>
+              <button class="bigbtn sec" id="btnStep" title="Pas à pas (+30 min)"><i class="fa-solid fa-forward-step"></i></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Comportement -->
+        <div class="panel">
+          <div class="ph"><div class="t"><i class="fa-solid fa-user-gear"></i>Comportement des conducteurs</div></div>
+          <div class="pb">
+            <div class="ctrl">
+              <div style="font-size:11px;color:var(--txt-2);font-weight:700;margin-bottom:8px">Typologie dominante</div>
+              <div class="seg" id="behaviorSeg">
+                <button data-b="eco" class="on"><i class="fa-solid fa-leaf"></i>Éco / Prudent</button>
+                <button data-b="normal"><i class="fa-solid fa-user"></i>Standard</button>
+                <button data-b="agressif"><i class="fa-solid fa-gauge-high"></i>Pressé / Agressif</button>
+              </div>
+              <div class="hint"><i class="fa-solid fa-circle-info"></i><span id="behaviorHint">Distances de sécurité longues, anticipation : capacité d'écoulement réduite mais conduite apaisée.</span></div>
+            </div>
+
+            <div class="ctrl">
+              <div class="row">
+                <label><i class="fa-solid fa-fire"></i>Indice d'agressivité / frustration</label>
+                <span class="v" id="aggV">35 %</span>
+              </div>
+              <input type="range" id="agg" min="0" max="100" step="1" value="35" />
+              <div class="scale"><span>Patient</span><span>Tendu</span><span>Agressif</span></div>
+            </div>
+
+            <div class="ctrl">
+              <div class="row">
+                <label><i class="fa-solid fa-gauge"></i>Respect des limitations</label>
+                <span class="v" id="respectV">75 %</span>
+              </div>
+              <input type="range" id="respect" min="0" max="100" step="1" value="75" />
+              <div class="scale"><span>Excès fréquents</span><span>Strict</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Demande -->
+        <div class="panel">
+          <div class="ph"><div class="t"><i class="fa-solid fa-people-group"></i>Demande de mobilité</div></div>
+          <div class="pb">
+            <div class="ctrl">
+              <div class="row">
+                <label><i class="fa-solid fa-house-laptop"></i>Taux de télétravail</label>
+                <span class="v" id="teleV">18 %</span>
+              </div>
+              <input type="range" id="tele" min="0" max="60" step="1" value="18" />
+              <div class="scale"><span>0%</span><span>30%</span><span>60%</span></div>
+            </div>
+            <div class="ctrl">
+              <div class="row">
+                <label><i class="fa-solid fa-chart-line"></i>Intensité globale de la demande</label>
+                <span class="v" id="demV">100 %</span>
+              </div>
+              <input type="range" id="dem" min="50" max="170" step="1" value="100" />
+              <div class="scale"><span>Vacances</span><span>Normal</span><span>Pic</span></div>
+            </div>
+            <div class="hint"><i class="fa-solid fa-users-line"></i><span>Population de référence : <b id="popRef" style="color:var(--txt-1)">430 000</b> hab. — actifs mobiles modélisés : <b id="popAct" style="color:var(--txt-1)">—</b></span></div>
+          </div>
+        </div>
+
+        <!-- Affichage -->
+        <div class="panel">
+          <div class="ph"><div class="t"><i class="fa-solid fa-layer-group"></i>Affichage cartographique</div></div>
+          <div class="pb">
+            <div class="ctrl" style="margin-bottom:10px">
+              <div class="seg" id="dispSeg">
+                <button data-d="charge" class="on"><i class="fa-solid fa-temperature-half"></i>Charge V/C</button>
+                <button data-d="vitesse"><i class="fa-solid fa-gauge-high"></i>Vitesse</button>
+                <button data-d="volume"><i class="fa-solid fa-car-side"></i>Volume</button>
+              </div>
+            </div>
+            <label style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--txt-1);cursor:pointer;font-weight:600">
+              <input type="checkbox" id="chkLabels" checked style="width:16px;height:16px;accent-color:var(--accent)"> Afficher les noms des pôles
+            </label>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================= COLONNE CENTRE : CARTE ============================= -->
+    <section class="col center">
+      <div id="map"></div>
+
+      <div class="map-overlay" style="top:14px;left:14px">
+        <div class="mapclock">
+          <div class="dot" id="clockDot"></div>
+          <div>
+            <div class="hh" id="mapHour">08:00</div>
+            <div class="ph" id="mapPeriod">Heure de pointe matinale</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="map-overlay" style="top:14px;right:14px">
+        <div class="livebadge"><span class="d"></span> MODÈLE BPR · AFFECTATION INCRÉMENTALE</div>
+      </div>
+
+      <div class="map-overlay" style="bottom:18px;right:14px">
+        <div class="legend">
+          <div class="lh">Taux de charge (V/C)</div>
+          <div class="li"><span class="sw" style="background:#22c55e"></span> Fluide&nbsp;&lt; 0,4</div>
+          <div class="li"><span class="sw" style="background:#f59e0b"></span> Dense&nbsp;0,4 – 0,8</div>
+          <div class="li"><span class="sw" style="background:#ef4444"></span> Congestion&nbsp;0,8 – 1,0</div>
+          <div class="li"><span class="sw" style="background:#a21caf"></span> Asphyxie&nbsp;&gt; 1,0</div>
+          <div class="lh" style="margin-top:11px">Pôles du réseau</div>
+          <div class="li"><span class="nd" style="background:#38bdf8"></span> Ville / agglomération</div>
+          <div class="li"><span class="nd" style="background:#fbbf24"></span> Verrou de transit (IdF…)</div>
+          <div style="font-size:9.5px;color:var(--txt-2);margin-top:8px;font-family:var(--mono)">Épaisseur ∝ volume de véhicules</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================= COLONNE DROITE : ANALYTICS ============================= -->
+    <section class="col right">
+      <div class="col-scroll" id="rightScroll">
+
+        <div class="section-title"><i class="fa-solid fa-chart-pie"></i> Tableau de bord analytique</div>
+
+        <!-- KPIs détaillés -->
+        <div class="kpi-grid">
+          <div class="mini">
+            <div class="mt"><i class="fa-solid fa-stopwatch" style="color:var(--dense)"></i>Perte / conducteur</div>
+            <div class="mv" id="miniDelay">—</div><div class="mu">min en moyenne</div>
+            <i class="fa-solid fa-hourglass-half bgi"></i>
+          </div>
+          <div class="mini">
+            <div class="mt"><i class="fa-solid fa-road" style="color:var(--accent)"></i>Indice de congestion</div>
+            <div class="mv" id="miniCong">—</div><div class="mu">% du parcours gêné</div>
+            <i class="fa-solid fa-traffic-light bgi"></i>
+          </div>
+          <div class="mini">
+            <div class="mt"><i class="fa-solid fa-gauge-high" style="color:var(--ok)"></i>Vitesse moyenne</div>
+            <div class="mv" id="miniSpeed">—</div><div class="mu">km/h (vitesse spatiale)</div>
+            <i class="fa-solid fa-gauge bgi"></i>
+          </div>
+          <div class="mini">
+            <div class="mt"><i class="fa-solid fa-smog" style="color:#f472b6"></i>CO₂ horaire</div>
+            <div class="mv" id="miniCo2">—</div><div class="mu">tonnes / heure</div>
+            <i class="fa-solid fa-cloud bgi"></i>
+          </div>
+        </div>
+
+        <!-- Graphe 1 : vitesse 24h -->
+        <div class="panel">
+          <div class="ph"><div class="t"><i class="fa-solid fa-chart-line"></i>Profil 24h du réseau</div><div class="x">vitesse & congestion</div></div>
+          <div class="pb"><div class="chart-wrap h-line"><canvas id="chart24"></canvas></div></div>
+        </div>
+
+        <!-- Graphe 2 : km congestionnés par catégorie -->
+        <div class="panel">
+          <div class="ph"><div class="t"><i class="fa-solid fa-chart-column"></i>Voies congestionnées</div><div class="x">km par catégorie</div></div>
+          <div class="pb"><div class="chart-wrap h-bar"><canvas id="chartBar"></canvas></div></div>
+        </div>
+
+        <!-- Graphe 3 : répartition trafic -->
+        <div class="panel">
+          <div class="ph"><div class="t"><i class="fa-solid fa-chart-pie"></i>Répartition du trafic</div><div class="x">part véh·km / type de voie</div></div>
+          <div class="pb"><div class="chart-wrap h-dough"><canvas id="chartDough"></canvas></div></div>
+        </div>
+
+        <!-- Flux d'événements (rétractable) -->
+        <div class="panel" id="eventsPanel">
+          <div class="ph"><div class="t"><i class="fa-solid fa-tower-broadcast"></i>Flux d'événements réseau</div>
+            <button class="collapse-btn" id="evToggle" title="Réduire / agrandir le flux"><i class="fa-solid fa-chevron-up"></i></button></div>
+          <div class="pb"><div class="events" id="events"></div></div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- Conteneur Toasts -->
+<div id="toasts"></div>
+
+<!-- ============================= MODAL MÉTHODOLOGIE ============================= -->
+<div class="modal-bg" id="methodoModal">
+  <div class="panel modal">
+    <div class="ph"><div class="t"><i class="fa-solid fa-flask"></i>Méthodologie & rigueur du modèle</div>
+      <button class="btn ghost icon" id="btnCloseMethodo"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="pb">
+      <p style="margin-top:0">
+        <span class="tag">Macro-simulation</span><span class="tag">Affectation statique</span><span class="tag">Eure-et-Loir (28)</span><br><br>
+        <b style="color:#fff">CentrO-Flux</b> est un simulateur de <b>macro-modélisation du trafic</b> à l'échelle départementale.
+        Il enchaîne les quatre étapes classiques de la modélisation des déplacements
+        (génération → distribution → <i>répartition modale implicite</i> → affectation) sur un graphe routier de l'Eure-et-Loir,
+        puis applique des lois de circulation reconnues pour estimer la congestion.
+      </p>
+
+      <h3><i class="fa-solid fa-people-arrows"></i>1. Génération & distribution (modèle gravitaire)</h3>
+      <p>Les flux pendulaires sont distribués par un <b>modèle gravitaire</b> de type Pareto spatial. Le nombre de déplacements
+      entre une zone <code>i</code> et une zone <code>j</code> est&nbsp;:</p>
+      <span class="formula">T<sub>ij</sub> = K · P<sub>i</sub> · A<sub>j</sub> · f(d<sub>ij</sub>) &nbsp;&nbsp;avec&nbsp;&nbsp; f(d) = (d + d₀)<sup>−γ</sup>, &nbsp; γ = 1,6</span>
+      <p>où <code>P<sub>i</sub></code> est l'émission (population active résidente), <code>A<sub>j</sub></code> l'attraction (emplois),
+      et <code>d<sub>ij</sub></code> la distance routière. Une <b>logique d'activités</b> oriente les flux&nbsp;: le matin domicile→travail
+      (pic gaussien à 08:00), le soir travail→domicile (pic à 17:30), garantissant des pointes <b>directionnelles</b> réalistes
+      (le matin, charge maximale <i>vers</i> Chartres et l'Île-de-France).</p>
+
+      <h3><i class="fa-solid fa-wave-square"></i>2. Profil temporel bimodal</h3>
+      <p>La demande horaire combine deux composantes gaussiennes (« double pic »)&nbsp;:</p>
+      <span class="formula">d(h) = S<sub>w</sub>·e^(−((h−8)/1,4)²) + S<sub>h</sub>·e^(−((h−17,5)/1,6)²) + base(h) + transit(h)</span>
+      <p>reproduisant les heures de pointe du matin et du soir, le creux nocturne et un socle de trafic de transit (poids lourds inclus) jamais nul.</p>
+
+      <h3><i class="fa-solid fa-timeline"></i>3. Fonction de coût des liens — Bureau of Public Roads (BPR)</h3>
+      <p>Le temps de parcours réel d'un tronçon est une fonction croissante de sa saturation&nbsp;:</p>
+      <span class="formula">T = T₀ · ( 1 + α · (V / C)<sup>β</sup> ) &nbsp;&nbsp;|&nbsp;&nbsp; α = 0,15 &nbsp; β = 4</span>
+      <p>avec <code>T₀ = L / v₀</code> le temps à flux libre, <code>V</code> le volume affecté (véh/h), <code>C</code> la capacité réglementaire.
+      C'est cette fonction, <b>non-linéaire</b>, qui pénalise les axes saturés et déclenche le report d'itinéraire.</p>
+
+      <h3><i class="fa-solid fa-car-burst"></i>4. Loi macroscopique de Greenshields</h3>
+      <p>La relation vitesse–densité utilisée pour le comportement et les émissions est linéaire&nbsp;:</p>
+      <span class="formula">v = v<sub>libre</sub> · ( 1 − k / k<sub>jam</sub> ) &nbsp;&nbsp;⇒&nbsp;&nbsp; débit q = k·v, &nbsp; capacité q<sub>max</sub> = v<sub>libre</sub>·k<sub>jam</sub> / 4</span>
+      <p>On en déduit la densité <code>k</code> à partir du débit affecté (branche fluide ou congestionnée), ce qui alimente la
+      qualité d'écoulement et le <b>facteur d'émission CO₂</b> en U (forte consommation à l'arrêt-relance ET à très haute vitesse)&nbsp;:</p>
+      <span class="formula">e(v) = A/v + B + C·v² &nbsp; (g CO₂/véh·km), &nbsp; majoré de (1 + 0,4·max(0, V/C − 0,8)) en régime saturé</span>
+
+      <h3><i class="fa-solid fa-route"></i>5. Affectation — équilibre usager approché (Dijkstra incrémental)</h3>
+      <p>Les flux sont affectés par <b>affectation incrémentale</b> (approximation de l'équilibre de Wardrop)&nbsp;: la demande est chargée
+      en 6 tranches successives <code>[0,40 · 0,25 · 0,15 · 0,10 · 0,07 · 0,03]</code>. Après chaque tranche, les coûts BPR sont recalculés,
+      puis chaque relation O-D est ré-affectée sur son <b>plus court chemin</b> (Dijkstra, tas binaire). Quand un axe (ex. la N154 Dreux–Chartres)
+      sature, son coût grimpe&nbsp;: les tranches suivantes <b>basculent</b> vers le réseau secondaire (D928, N12+N10…), simulant le report de trafic.</p>
+
+      <h3><i class="fa-solid fa-map-location-dot"></i>6. Traitement spatial & rendu cartographique</h3>
+      <p>Chaque tronçon est tracé par une <b>polyligne réelle</b> (tableaux de coordonnées <code>[lat,lng]</code> embarqués)
+      suivant le corridor effectif de l'axe routier, avec ses courbes et sinuosités — et non plus un simple segment droit.
+      <b>La longueur prise en compte par le moteur (T₀, capacité, vitesses) est calculée directement sur cette géométrie</b>
+      (somme des sous-segments haversine), garantissant la cohérence parfaite entre l'affichage et le calcul.</p>
+      <p>Le rendu utilise un <b>canvas Leaflet</b> (<code>preferCanvas:true</code>) ; à chaque pas de simulation, seules les
+      <b>propriétés graphiques</b> des polylignes sont mises à jour (<code>setStyle</code> : couleur V/C, épaisseur ∝ volume),
+      sans manipulation du DOM — d'où une fluidité proche de 60 FPS. Le contour du département est une donnée ouverte réelle.</p>
+
+      <h3><i class="fa-solid fa-diagram-project"></i>Structure du graphe</h3>
+      <table class="meta">
+        <tr><th>Élément</th><th>Détail</th></tr>
+        <tr><td>Nœuds</td><td id="metaNodes">—</td></tr>
+        <tr><td>Arcs orientés</td><td id="metaArcs">—</td></tr>
+        <tr><td>Tracés routiers</td><td id="metaGeom">—</td></tr>
+        <tr><td>Linéaire total</td><td id="metaLin">—</td></tr>
+        <tr><td>Pôles principaux</td><td>Chartres · Dreux · Châteaudun · Nogent-le-Rotrou</td></tr>
+        <tr><td>Verrous de transit</td><td>Île-de-France (A11/N10 · N12) · Le Mans · Alençon · Orléans · Évreux</td></tr>
+        <tr><td>Capacités (vp/h/voie)</td><td>Autoroute 2000 · Nationale 1500 · Départementale 1000</td></tr>
+      </table>
+
+      <div class="src">
+        <b style="color:var(--txt-1)">Sources conceptuelles&nbsp;:</b><br>
+        • Bureau of Public Roads (1964), <i>Traffic Assignment Manual</i> — fonction volume-délai (α=0,15 ; β=4).<br>
+        • Greenshields B.D. (1935), <i>A Study of Traffic Capacity</i> — relation linéaire vitesse-densité.<br>
+        • Wardrop J.G. (1952) — principes d'équilibre ; affectation incrémentale (Sheffi, <i>Urban Transportation Networks</i>, 1985).<br>
+        • Modèle gravitaire de distribution (Wilson, 1967).<br>
+        • Contour départemental&nbsp;: <i>france-geojson</i> (G. David) — donnée ouverte, simplifiée Douglas-Peucker.<br>
+        <i style="color:var(--txt-2)">Données géographiques&nbsp;: tracés routiers digitalisés suivant les corridors réels des axes de l'Eure-et-Loir (A11, N10, N12, N154, D906, D910, D928…), population de référence ≈ 430 000 habitants. Les tracés et volumes sont indicatifs, à vocation pédagogique (l'accès aux services OSM/routage live est restreint dans cet environnement).</i>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* =================================================================================
+   CentrO-Flux · Intelligence Routière 28
+   Macro-simulation du trafic — Eure-et-Loir (28)
+   Architecture : Store centralisé / données géo / moteur de calcul (isolé) /
+                  affectation (Dijkstra incrémental) / rendu (carte + charts + UI)
+   ================================================================================= */
+
+/* ====================== UTILITAIRES ====================== */
+const fr0 = new Intl.NumberFormat('fr-FR',{maximumFractionDigits:0});
+const fr1 = new Intl.NumberFormat('fr-FR',{maximumFractionDigits:1});
+const fr2 = new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2});
+const clamp = (x,a,b)=>Math.max(a,Math.min(b,x));
+const lerp  = (a,b,t)=>a+(b-a)*t;
+const $ = id => document.getElementById(id);
+
+/** Distance haversine en kilomètres. */
+function haversine(la1,lo1,la2,lo2){
+  const R=6371, toR=Math.PI/180;
+  const dLa=(la2-la1)*toR, dLo=(lo2-lo1)*toR;
+  const a=Math.sin(dLa/2)**2 + Math.cos(la1*toR)*Math.cos(la2*toR)*Math.sin(dLo/2)**2;
+  return 2*R*Math.asin(Math.sqrt(a));
+}
+/** Longueur réelle d'une polyligne [[lat,lng],...] en km (somme des sous-segments haversine). */
+function polyLength(g){ let s=0; for(let i=1;i<g.length;i++) s+=haversine(g[i-1][0],g[i-1][1],g[i][0],g[i][1]); return s; }
+
+/* ====================== STORE CENTRALISÉ (état) ====================== */
+const Store = {
+  state:{
+    hour:8,                 // heure courante (0-23.5)
+    behavior:'eco',         // typologie : eco | normal | agressif
+    agg:35,                 // indice d'agressivité 0-100
+    respect:75,             // respect des limitations 0-100
+    tele:18,                // taux de télétravail %
+    demand:100,             // intensité globale de la demande %
+    display:'charge',       // mode d'affichage carte : charge | vitesse | volume
+    labels:true,
+    playing:false
+  },
+  listeners:[],
+  set(patch){ Object.assign(this.state,patch); this.emit(); },
+  subscribe(fn){ this.listeners.push(fn); },
+  emit(){ this.listeners.forEach(fn=>fn(this.state)); }
+};
+
+/* Paramètres physiques constants */
+const PARAMS = { ALPHA:0.15, BETA:4, DEPT_POP:430000, INCREMENTS:[0.40,0.25,0.15,0.10,0.07,0.03] };
+
+/* Capacités par voie (vp/h) et libellés par catégorie. La longueur réelle des
+   tronçons provient désormais de leur tracé géométrique embarqué (cf. polyLength). */
+const CAT = {
+  A:{label:'Autoroute',       capLane:2000, color:'#7dd3fc'},
+  N:{label:'Nationale',       capLane:1500, color:'#a5b4fc'},
+  D:{label:'Départementale',  capLane:1000, color:'#cbd5e1'}
+};
+
+/* ====================== DONNÉES GÉOGRAPHIQUES (Eure-et-Loir) ======================
+   Nœuds = communes (avec population & emplois) + verrous de transit (portes).
+   Coordonnées réelles (lat,lng). Populations indicatives (commune/agglo).            */
+/* Contour réel de l'Eure-et-Loir — open data (france-geojson), simplifié Douglas-Peucker. */
+const DEPT_OUTLINE = [[48.6702,0.8148],[48.6807,0.8277],[48.6829,0.8504],[48.7155,0.8767],[48.7189,0.8884],[48.7092,0.9212],[48.7168,0.9552],[48.7257,0.9614],[48.7301,0.9773],[48.7281,1.0141],[48.7348,1.0206],[48.7306,1.0316],[48.7568,1.0591],[48.7494,1.0758],[48.7569,1.086],[48.7487,1.0957],[48.7519,1.1127],[48.7672,1.121],[48.7892,1.1214],[48.7856,1.1521],[48.774,1.1533],[48.7693,1.1615],[48.7726,1.1847],[48.7581,1.2235],[48.7673,1.2226],[48.7697,1.246],[48.7651,1.2563],[48.7586,1.2545],[48.7575,1.2702],[48.7675,1.3003],[48.7626,1.3329],[48.7725,1.3422],[48.7826,1.3744],[48.7918,1.377],[48.8136,1.3592],[48.8342,1.3622],[48.8612,1.4094],[48.8703,1.455],[48.8776,1.4654],[48.8922,1.4684],[48.9005,1.4607],[48.9146,1.4593],[48.9246,1.448],[48.9289,1.4594],[48.9376,1.4613],[48.9411,1.5015],[48.9366,1.509],[48.9226,1.5129],[48.9218,1.5386],[48.9067,1.5385],[48.8916,1.5573],[48.8821,1.5595],[48.8724,1.5462],[48.8609,1.578],[48.8444,1.5773],[48.8397,1.5952],[48.8342,1.5942],[48.8321,1.5837],[48.8149,1.5912],[48.7905,1.5757],[48.7736,1.5876],[48.7633,1.5849],[48.7481,1.6264],[48.7125,1.5895],[48.7093,1.5949],[48.7018,1.5795],[48.6964,1.5823],[48.6895,1.6118],[48.6638,1.6025],[48.6528,1.6156],[48.6513,1.6432],[48.6434,1.641],[48.6381,1.6516],[48.6323,1.6496],[48.6137,1.6662],[48.6185,1.6794],[48.6115,1.6894],[48.6144,1.7149],[48.6069,1.7179],[48.585,1.702],[48.578,1.7092],[48.5723,1.7368],[48.5761,1.7459],[48.5694,1.7653],[48.5594,1.7674],[48.5537,1.7872],[48.5277,1.7758],[48.5081,1.7786],[48.4974,1.7906],[48.4899,1.7857],[48.4842,1.7963],[48.4661,1.8015],[48.4665,1.8364],[48.4494,1.8449],[48.4406,1.8775],[48.4401,1.9064],[48.4457,1.9066],[48.4478,1.9207],[48.4576,1.9221],[48.4534,1.9304],[48.4423,1.9331],[48.4411,1.9429],[48.4127,1.9259],[48.4041,1.9306],[48.3994,1.9766],[48.3816,1.9664],[48.3803,1.9763],[48.3621,1.9868],[48.353,1.9734],[48.3353,1.9749],[48.3283,1.9823],[48.3087,1.9592],[48.2872,1.9753],[48.2866,1.9941],[48.2687,1.9879],[48.2555,1.9655],[48.2396,1.9621],[48.2243,1.9633],[48.2013,1.9777],[48.2036,1.9573],[48.1896,1.9515],[48.1831,1.971],[48.1711,1.971],[48.1749,1.9571],[48.169,1.937],[48.1745,1.925],[48.1675,1.9143],[48.1496,1.9054],[48.1464,1.9204],[48.131,1.913],[48.1276,1.8996],[48.0977,1.8844],[48.0952,1.8649],[48.0839,1.8657],[48.0871,1.8376],[48.0807,1.8321],[48.0894,1.8015],[48.0769,1.798],[48.0661,1.7448],[48.0669,1.709],[48.078,1.6889],[48.0658,1.679],[48.0762,1.6557],[48.0672,1.6246],[48.0487,1.621],[48.0422,1.5967],[48.0307,1.5941],[48.0446,1.5453],[48.0379,1.5408],[48.0296,1.5471],[48.0335,1.5277],[48.0287,1.513],[48.0119,1.5186],[48.0073,1.5267],[47.9823,1.5201],[47.9853,1.4986],[48.0119,1.4397],[48.0085,1.4326],[47.9765,1.4372],[47.9701,1.4069],[47.9813,1.3869],[47.9547,1.3654],[47.9651,1.3462],[47.9576,1.3375],[47.9539,1.3086],[47.9682,1.2996],[47.9615,1.2682],[47.9758,1.2556],[47.9788,1.2368],[47.9685,1.2096],[47.972,1.1915],[47.9774,1.2026],[48.0197,1.1618],[48.0274,1.1666],[48.0287,1.1439],[48.0391,1.1212],[48.0602,1.1078],[48.0807,1.1122],[48.0774,1.0789],[48.0865,1.0628],[48.0884,1.026],[48.0831,1.0086],[48.089,0.9958],[48.0969,0.991],[48.1059,1.0055],[48.1176,1.0456],[48.1238,1.0481],[48.1316,1.0387],[48.1275,0.9973],[48.0993,0.9503],[48.1124,0.944],[48.1021,0.8909],[48.1094,0.8759],[48.1031,0.8412],[48.1226,0.8554],[48.1336,0.8526],[48.1351,0.9138],[48.1489,0.9116],[48.1618,0.8825],[48.1674,0.8368],[48.188,0.7956],[48.203,0.8063],[48.2107,0.8305],[48.2613,0.7876],[48.293,0.7934],[48.3028,0.7776],[48.2982,0.7602],[48.3069,0.7622],[48.3404,0.7854],[48.3494,0.8184],[48.3424,0.8279],[48.3502,0.8416],[48.3509,0.8618],[48.3583,0.8702],[48.3567,0.8834],[48.3734,0.9018],[48.3743,0.9149],[48.399,0.9422],[48.4178,0.9483],[48.4391,0.9763],[48.4426,0.9584],[48.4577,0.9423],[48.4756,0.9357],[48.4823,0.9563],[48.4906,0.9544],[48.4987,0.9416],[48.5038,0.954],[48.5227,0.9666],[48.5377,0.9226],[48.5506,0.9388],[48.5594,0.9264],[48.5722,0.8913],[48.5735,0.8677],[48.5826,0.8506],[48.6048,0.8466],[48.6099,0.8196],[48.6163,0.8178],[48.6338,0.8314],[48.6605,0.8129],[48.6702,0.8148]];
+
+const NODES = [
+  // --- Pôles & communes ---
+  {id:'chartres',   name:'Chartres',            lat:48.4439, lng:1.4895, type:'ville', pop:38500, jobs:34000},
+  {id:'dreux',      name:'Dreux',               lat:48.7372, lng:1.3667, type:'ville', pop:31000, jobs:19000},
+  {id:'chateaudun', name:'Châteaudun',          lat:48.0717, lng:1.3281, type:'ville', pop:13000, jobs:8500},
+  {id:'nogent',     name:'Nogent-le-Rotrou',    lat:48.3225, lng:0.8261, type:'ville', pop:15000, jobs:9000},
+  {id:'maintenon',  name:'Maintenon',           lat:48.5853, lng:1.5783, type:'ville', pop:4600,  jobs:2600},
+  {id:'epernon',    name:'Épernon',             lat:48.6111, lng:1.6753, type:'ville', pop:5600,  jobs:2700},
+  {id:'auneau',     name:'Auneau-Bleury',       lat:48.4603, lng:1.7694, type:'ville', pop:5200,  jobs:2600},
+  {id:'voves',      name:'Voves',               lat:48.2725, lng:1.6256, type:'ville', pop:3000,  jobs:1500},
+  {id:'bonneval',   name:'Bonneval',            lat:48.1808, lng:1.3878, type:'ville', pop:4500,  jobs:2100},
+  {id:'brou',       name:'Brou',                lat:48.2178, lng:1.1697, type:'ville', pop:3300,  jobs:1700},
+  {id:'laloupe',    name:'La Loupe',            lat:48.4731, lng:1.0131, type:'ville', pop:3600,  jobs:2000},
+  {id:'courville',  name:'Courville-sur-Eure',  lat:48.4458, lng:1.2433, type:'ville', pop:3000,  jobs:1300},
+  {id:'illiers',    name:'Illiers-Combray',     lat:48.2972, lng:1.2469, type:'ville', pop:3300,  jobs:1500},
+  {id:'chateauneuf',name:'Châteauneuf-en-Th.',  lat:48.5850, lng:1.2472, type:'ville', pop:2700,  jobs:1300},
+  {id:'senonches',  name:'Senonches',           lat:48.5575, lng:1.0303, type:'ville', pop:3100,  jobs:1400},
+  {id:'anet',       name:'Anet',                lat:48.8589, lng:1.4378, type:'ville', pop:2800,  jobs:1300},
+  {id:'nonancourt', name:'Nonancourt',          lat:48.7714, lng:1.1981, type:'ville', pop:2400,  jobs:1200},
+  // --- Verrous de transit (portes du département) ---
+  {id:'p_idf_a11',  name:'Accès Île-de-France (A11/N10)', lat:48.5150, lng:1.8550, type:'porte', pop:0, jobs:95000},
+  {id:'p_idf_n12',  name:'Accès Paris (N12)',             lat:48.7950, lng:1.5950, type:'porte', pop:0, jobs:62000},
+  {id:'p_lemans',   name:'Accès Le Mans (A11)',           lat:48.2650, lng:0.7250, type:'porte', pop:0, jobs:17000},
+  {id:'p_alencon',  name:'Accès Alençon (N12)',           lat:48.7950, lng:1.0550, type:'porte', pop:0, jobs:9000},
+  {id:'p_orleans',  name:'Accès Orléans (N154)',          lat:47.9950, lng:1.4850, type:'porte', pop:0, jobs:22000},
+  {id:'p_tours',    name:'Accès Vendôme/Tours (N10)',     lat:48.0000, lng:1.2550, type:'porte', pop:0, jobs:11000},
+  {id:'p_evreux',   name:'Accès Évreux/Rouen (N154)',     lat:48.8600, lng:1.3200, type:'porte', pop:0, jobs:26000}
+];
+
+/* Tronçons (non orientés) : a,b = ids ; cat ; lanes (par sens) ; vlim ; name.
+   Deux arcs orientés seront générés par tronçon.                                     */
+const SEGMENTS = [
+  {a:'p_idf_a11',b:'chartres',cat:'A',lanes:2,vlim:130,name:'A11 · Île-de-France ↔ Chartres',
+   geom:[[48.515,1.855],[48.5125,1.806],[48.516,1.741],[48.51,1.679],[48.498,1.621],[48.486,1.566],[48.473,1.53],[48.458,1.508],[48.4439,1.4895]]},
+  {a:'chartres',b:'p_lemans',cat:'A',lanes:2,vlim:130,name:'A11 · Chartres ↔ Le Mans',
+   geom:[[48.4439,1.4895],[48.43,1.43],[48.413,1.36],[48.392,1.28],[48.366,1.19],[48.34,1.08],[48.316,0.965],[48.295,0.86],[48.275,0.77],[48.265,0.725]]},
+  {a:'p_idf_a11',b:'chartres',cat:'N',lanes:2,vlim:110,name:'N10 · Rambouillet ↔ Chartres',
+   geom:[[48.515,1.855],[48.524,1.77],[48.53,1.7],[48.527,1.64],[48.52,1.585],[48.505,1.545],[48.488,1.512],[48.47,1.492],[48.4439,1.4895]]},
+  {a:'chartres',b:'bonneval',cat:'N',lanes:2,vlim:110,name:'N10 · Chartres ↔ Bonneval',
+   geom:[[48.4439,1.4895],[48.42,1.475],[48.398,1.469],[48.36,1.455],[48.318,1.44],[48.27,1.425],[48.225,1.41],[48.1808,1.3878]]},
+  {a:'bonneval',b:'chateaudun',cat:'N',lanes:2,vlim:110,name:'N10 · Bonneval ↔ Châteaudun',
+   geom:[[48.1808,1.3878],[48.155,1.378],[48.13,1.362],[48.105,1.348],[48.0717,1.3281]]},
+  {a:'chateaudun',b:'p_tours',cat:'N',lanes:1,vlim:90,name:'N10 · Châteaudun ↔ Vendôme',
+   geom:[[48.0717,1.3281],[48.048,1.31],[48.022,1.285],[48.003,1.262],[48,1.255]]},
+  {a:'p_idf_n12',b:'dreux',cat:'N',lanes:2,vlim:110,name:'N12 · Paris ↔ Dreux',
+   geom:[[48.795,1.595],[48.788,1.54],[48.778,1.485],[48.768,1.44],[48.755,1.405],[48.7372,1.3667]]},
+  {a:'dreux',b:'nonancourt',cat:'N',lanes:2,vlim:110,name:'N12 · Dreux ↔ Nonancourt',
+   geom:[[48.7372,1.3667],[48.742,1.32],[48.745,1.27],[48.748,1.245],[48.76,1.215],[48.7714,1.1981]]},
+  {a:'nonancourt',b:'p_alencon',cat:'N',lanes:1,vlim:90,name:'N12 · Nonancourt ↔ Alençon',
+   geom:[[48.7714,1.1981],[48.778,1.16],[48.785,1.11],[48.792,1.075],[48.795,1.055]]},
+  {a:'p_evreux',b:'dreux',cat:'N',lanes:1,vlim:90,name:'N154 · Évreux ↔ Dreux',
+   geom:[[48.86,1.32],[48.835,1.335],[48.808,1.35],[48.78,1.36],[48.76,1.362],[48.7372,1.3667]]},
+  {a:'dreux',b:'chartres',cat:'N',lanes:1,vlim:90,name:'N154 · Dreux ↔ Chartres',
+   geom:[[48.7372,1.3667],[48.7,1.385],[48.66,1.405],[48.62,1.425],[48.578,1.445],[48.535,1.46],[48.495,1.475],[48.46,1.483],[48.4439,1.4895]]},
+  {a:'chartres',b:'p_orleans',cat:'N',lanes:2,vlim:110,name:'N154 · Chartres ↔ Orléans',
+   geom:[[48.4439,1.4895],[48.41,1.492],[48.36,1.495],[48.3,1.498],[48.23,1.495],[48.15,1.49],[48.07,1.487],[47.995,1.485]]},
+  {a:'chartres',b:'maintenon',cat:'D',lanes:1,vlim:90,name:'D906 · Chartres ↔ Maintenon',
+   geom:[[48.4439,1.4895],[48.47,1.505],[48.5,1.52],[48.53,1.545],[48.56,1.565],[48.5853,1.5783]]},
+  {a:'maintenon',b:'epernon',cat:'D',lanes:1,vlim:80,name:'D906 · Maintenon ↔ Épernon',
+   geom:[[48.5853,1.5783],[48.595,1.61],[48.602,1.645],[48.6111,1.6753]]},
+  {a:'epernon',b:'p_idf_a11',cat:'D',lanes:1,vlim:80,name:'D · Épernon ↔ Île-de-France',
+   geom:[[48.6111,1.6753],[48.595,1.71],[48.575,1.755],[48.55,1.8],[48.53,1.835],[48.515,1.855]]},
+  {a:'chartres',b:'auneau',cat:'D',lanes:1,vlim:90,name:'D910 · Chartres ↔ Auneau',
+   geom:[[48.4439,1.4895],[48.44,1.54],[48.443,1.595],[48.45,1.66],[48.455,1.72],[48.4603,1.7694]]},
+  {a:'auneau',b:'p_idf_a11',cat:'D',lanes:1,vlim:90,name:'D · Auneau ↔ A10/Ablis',
+   geom:[[48.4603,1.7694],[48.475,1.795],[48.492,1.82],[48.515,1.855]]},
+  {a:'chartres',b:'courville',cat:'D',lanes:1,vlim:90,name:'RD910 · Chartres ↔ Courville',
+   geom:[[48.4439,1.4895],[48.448,1.44],[48.452,1.385],[48.458,1.33],[48.452,1.285],[48.4458,1.2433]]},
+  {a:'courville',b:'nogent',cat:'D',lanes:1,vlim:90,name:'RD910 · Courville ↔ Nogent',
+   geom:[[48.4458,1.2433],[48.46,1.19],[48.47,1.13],[48.455,1.06],[48.42,0.99],[48.385,0.93],[48.35,0.875],[48.3225,0.8261]]},
+  {a:'chartres',b:'illiers',cat:'D',lanes:1,vlim:80,name:'D921 · Chartres ↔ Illiers-Combray',
+   geom:[[48.4439,1.4895],[48.42,1.45],[48.39,1.4],[48.355,1.345],[48.325,1.295],[48.2972,1.2469]]},
+  {a:'illiers',b:'brou',cat:'D',lanes:1,vlim:80,name:'D · Illiers ↔ Brou',
+   geom:[[48.2972,1.2469],[48.275,1.23],[48.25,1.205],[48.23,1.185],[48.2178,1.1697]]},
+  {a:'brou',b:'nogent',cat:'D',lanes:1,vlim:80,name:'D955 · Brou ↔ Nogent',
+   geom:[[48.2178,1.1697],[48.245,1.11],[48.28,1.04],[48.305,0.95],[48.318,0.88],[48.3225,0.8261]]},
+  {a:'brou',b:'chateaudun',cat:'D',lanes:1,vlim:80,name:'D955 · Brou ↔ Châteaudun',
+   geom:[[48.2178,1.1697],[48.195,1.2],[48.165,1.235],[48.13,1.275],[48.1,1.305],[48.0717,1.3281]]},
+  {a:'chartres',b:'voves',cat:'D',lanes:1,vlim:90,name:'D935 · Chartres ↔ Voves',
+   geom:[[48.4439,1.4895],[48.415,1.52],[48.38,1.555],[48.34,1.58],[48.3,1.605],[48.2725,1.6256]]},
+  {a:'voves',b:'chateaudun',cat:'D',lanes:1,vlim:80,name:'D · Voves ↔ Châteaudun',
+   geom:[[48.2725,1.6256],[48.24,1.575],[48.2,1.51],[48.16,1.45],[48.12,1.39],[48.0717,1.3281]]},
+  {a:'chartres',b:'chateauneuf',cat:'D',lanes:1,vlim:90,name:'D928 · Chartres ↔ Châteauneuf',
+   geom:[[48.4439,1.4895],[48.47,1.45],[48.5,1.405],[48.53,1.36],[48.56,1.3],[48.585,1.2472]]},
+  {a:'chateauneuf',b:'dreux',cat:'D',lanes:1,vlim:90,name:'D928 · Châteauneuf ↔ Dreux',
+   geom:[[48.585,1.2472],[48.61,1.28],[48.64,1.31],[48.68,1.335],[48.71,1.355],[48.7372,1.3667]]},
+  {a:'chateauneuf',b:'senonches',cat:'D',lanes:1,vlim:80,name:'D928 · Châteauneuf ↔ Senonches',
+   geom:[[48.585,1.2472],[48.58,1.2],[48.572,1.14],[48.565,1.085],[48.5575,1.0303]]},
+  {a:'senonches',b:'laloupe',cat:'D',lanes:1,vlim:80,name:'D · Senonches ↔ La Loupe',
+   geom:[[48.5575,1.0303],[48.535,1.02],[48.51,1.015],[48.49,1.013],[48.4731,1.0131]]},
+  {a:'laloupe',b:'nogent',cat:'D',lanes:1,vlim:80,name:'D · La Loupe ↔ Nogent',
+   geom:[[48.4731,1.0131],[48.45,0.975],[48.42,0.93],[48.385,0.89],[48.35,0.855],[48.3225,0.8261]]},
+  {a:'courville',b:'laloupe',cat:'D',lanes:1,vlim:80,name:'D920 · Courville ↔ La Loupe',
+   geom:[[48.4458,1.2433],[48.46,1.19],[48.475,1.13],[48.478,1.07],[48.4731,1.0131]]},
+  {a:'dreux',b:'anet',cat:'D',lanes:1,vlim:90,name:'D928a · Dreux ↔ Anet',
+   geom:[[48.7372,1.3667],[48.76,1.385],[48.79,1.4],[48.825,1.42],[48.8589,1.4378]]},
+  {a:'anet',b:'p_idf_n12',cat:'D',lanes:1,vlim:90,name:'D · Anet ↔ Île-de-France',
+   geom:[[48.8589,1.4378],[48.85,1.48],[48.835,1.525],[48.815,1.565],[48.795,1.595]]},
+  {a:'dreux',b:'maintenon',cat:'D',lanes:1,vlim:90,name:'D · Dreux ↔ Nogent-le-Roi ↔ Maintenon',
+   geom:[[48.7372,1.3667],[48.71,1.4],[48.68,1.445],[48.655,1.49],[48.62,1.545],[48.5853,1.5783]]},
+];
+
+/* ====================== CONSTRUCTION DU GRAPHE ======================
+   Génère arcs orientés, adjacence, et lie chaque tronçon à ses 2 arcs.   */
+function buildGraph(){
+  const nodeIndex = {};
+  NODES.forEach((n,i)=>{ n.idx=i; nodeIndex[n.id]=i; });
+
+  const arcs = [];                 // arcs orientés
+  const adj  = NODES.map(()=>[]);  // adjacence : adj[u] = [{arc, to}]
+  const segments = [];
+
+  SEGMENTS.forEach(seg=>{
+    const a = NODES[nodeIndex[seg.a]], b = NODES[nodeIndex[seg.b]];
+    const cat = CAT[seg.cat];
+    const lengthKm = polyLength(seg.geom);  // longueur = tracé réel embarqué
+    const capacity = cat.capLane * seg.lanes;                 // capacité par sens (véh/h)
+
+    // arc a->b
+    const arcF = { id:arcs.length, seg:segments.length, from:a.idx, to:b.idx, dir:'F',
+                   cat:seg.cat, vlim:seg.vlim, lanes:seg.lanes, lengthKm, capacity, vol:0, t0:0, time:0 };
+    arcs.push(arcF); adj[a.idx].push({arc:arcF.id, to:b.idx});
+    // arc b->a
+    const arcB = { id:arcs.length, seg:segments.length, from:b.idx, to:a.idx, dir:'B',
+                   cat:seg.cat, vlim:seg.vlim, lanes:seg.lanes, lengthKm, capacity, vol:0, t0:0, time:0 };
+    arcs.push(arcB); adj[b.idx].push({arc:arcB.id, to:a.idx});
+
+    segments.push({
+      id:segments.length, name:seg.name, cat:seg.cat, vlim:seg.vlim, lanes:seg.lanes,
+      lengthKm, capacity, a:a.idx, b:b.idx, arcF:arcF.id, arcB:arcB.id,
+      latlngs:seg.geom
+    });
+  });
+
+  return { nodes:NODES, nodeIndex, arcs, adj, segments };
+}
+const GRAPH = buildGraph();
+
+/* ====================== MOTEUR : COMPORTEMENT / BPR / GREENSHIELDS ====================== */
+
+/** Coefficients comportementaux dérivés de la typologie + sliders. */
+function behaviorCoefs(s){
+  const agg = s.agg/100, respect = s.respect/100;
+  // base par typologie
+  let capBase, speedBase;
+  if(s.behavior==='eco')      { capBase=0.94; speedBase=0.98; }
+  else if(s.behavior==='agressif'){ capBase=1.10; speedBase=1.06; }
+  else                        { capBase=1.00; speedBase=1.00; }
+  // l'agressivité raccourcit les distances de sécurité => +capacité, +vitesse pratiquée
+  const capFactor   = capBase * (1 + 0.12*agg);
+  // non-respect des limitations => excès de vitesse (jusqu'à +15%)
+  const speedFactor = speedBase * (1 + 0.15*(1-respect)) * (1 + 0.04*agg);
+  // sensibilité/frustration : modifie légèrement l'exposant BPR perçu
+  const beta = PARAMS.BETA + (s.behavior==='agressif'? 0.6 : s.behavior==='eco'? -0.4 : 0) + 0.6*(agg-0.5);
+  return { capFactor, speedFactor, beta:clamp(beta,2.5,5.5), agg, respect };
+}
+
+/** Prépare T0 et capacité effective de chaque arc pour la simulation courante. */
+function prepareArcs(graph, coefs){
+  for(const arc of graph.arcs){
+    const vfree = arc.vlim * coefs.speedFactor;                 // vitesse pratiquée à vide (km/h)
+    arc.vfree = vfree;
+    arc.t0 = arc.lengthKm / vfree;                              // temps flux libre (h)
+    arc.cap = Math.max(50, arc.capacity * coefs.capFactor);     // capacité effective (véh/h)
+    arc.vol = 0;
+  }
+}
+
+/** Fonction de coût BPR : temps de parcours (h) pour un volume donné. */
+function bpr(t0, vol, cap, beta){
+  return t0 * (1 + PARAMS.ALPHA * Math.pow(vol/cap, beta));
+}
+
+/** Loi de Greenshields : densité k (véh/km) et vitesse (km/h) à partir du débit.
+    q = k·v, v = vf·(1 − k/kj), qmax = vf·kj/4. */
+function greenshields(vol, cap, vfree){
+  const kj = 4*cap/vfree;                  // densité de saturation (véh/km) déduite de la capacité
+  const ratio = clamp(vol/cap, 0, 1.6);
+  // résout vf/kj·k² − vf·k + q = 0 (branche fluide) ; au-delà de qmax => régime forcé
+  let k, v;
+  if(ratio<=1){
+    const disc = Math.max(0, 1 - ratio);   // discriminant normalisé
+    k = (kj/2)*(1 - Math.sqrt(disc));      // branche fluide (densité basse)
+    v = vfree*(1 - k/kj);
+  } else {
+    // sur-saturation : effondrement vers la densité jam
+    k = (kj/2)*(1 + clamp((ratio-1)*1.4,0,1));
+    v = vfree*(1 - k/kj);
+  }
+  return { k, v:Math.max(4,v), kjam:kj };
+}
+
+/** Facteur d'émission CO2 (g/véh·km) en U + surconsommation arrêt-relance. */
+function emissionFactor(v, vc){
+  const base = 760/Math.max(8,v) + 95 + 0.0045*v*v;   // courbe en U (min ≈ 70-80 km/h)
+  const stopGo = 1 + 0.45*Math.max(0, vc-0.8);        // pénalité régime saturé
+  return base*stopGo;
+}
+
+/* ====================== DEMANDE : PROFIL TEMPOREL & MATRICE O-D ====================== */
+
+const gauss = (h,mu,sig)=>Math.exp(-(((h-mu)/sig)**2));
+/** Composantes temporelles d'activité (sans dimension, ~0..1). */
+const toWork   = h => gauss(h,8.0,1.45);
+const toHome   = h => gauss(h,17.5,1.7);
+const baseTrip = h => 0.10 + 0.42*gauss(h,13,3.6) + 0.18*gauss(h,19.5,2.2);   // achats/loisirs
+const transitP = h => 0.30 + 0.70*gauss(h,13.5,5.2) + 0.10*gauss(h,3,3);       // transit + fret nocturne
+
+/* Échelles de calibrage (véh/h au pic de chaque composante) */
+const SCALE = { work:16500, base:5200, transit:3600 };
+
+/* Relations de transit entre portes (poids relatifs) */
+const TRANSIT_OD = [
+  ['p_idf_a11','p_lemans', 1.00],   // A11 transit
+  ['p_idf_n12','p_alencon',0.62],   // N12 transit
+  ['p_evreux', 'p_orleans',0.55],   // N154 transit
+  ['p_idf_a11','p_tours',  0.48],   // N10 transit
+  ['p_idf_a11','p_orleans',0.30]
+];
+
+/** Pré-calcul des poids gravitaires (indépendants de l'heure). */
+function precomputeGravity(graph){
+  const N = graph.nodes.length;
+  const dist = Array.from({length:N},()=>new Float64Array(N));
+  for(let i=0;i<N;i++) for(let j=0;j<N;j++){
+    const a=graph.nodes[i], b=graph.nodes[j];
+    dist[i][j]= i===j?0:haversine(a.lat,a.lng,b.lat,b.lng);
+  }
+  // matrice "travail" non normalisée : prod=pop, attr=jobs, déterrence (d+d0)^-gamma
+  const gamma=1.6, d0=3;
+  let work=[]; let sumWork=0;
+  for(let i=0;i<N;i++){
+    const Pi=graph.nodes[i].pop;
+    if(Pi<=0) continue;
+    for(let j=0;j<N;j++){
+      if(i===j) continue;
+      const Aj=graph.nodes[j].jobs;
+      if(Aj<=0) continue;
+      const f=Math.pow(dist[i][j]+d0,-gamma);
+      const w=Pi*Aj*f;
+      work.push({i,j,w}); sumWork+=w;
+    }
+  }
+  work.forEach(o=>o.w/=sumWork);   // normalisé (somme=1)
+
+  // matrice "base" symétrique (toutes zones peuplées entre elles + vers pôles)
+  let base=[]; let sumBase=0;
+  for(let i=0;i<N;i++){
+    const Pi=graph.nodes[i].pop + graph.nodes[i].jobs*0.3;
+    if(Pi<=0) continue;
+    for(let j=0;j<N;j++){
+      if(i===j) continue;
+      const Aj=graph.nodes[j].pop + graph.nodes[j].jobs*0.6;
+      if(Aj<=0) continue;
+      const f=Math.pow(dist[i][j]+d0,-1.9);
+      const w=Pi*Aj*f;
+      base.push({i,j,w}); sumBase+=w;
+    }
+  }
+  base.forEach(o=>o.w/=sumBase);
+
+  // transit normalisé
+  let transit=[]; let sumT=0;
+  TRANSIT_OD.forEach(([a,b,w])=>{
+    const i=graph.nodeIndex[a], j=graph.nodeIndex[b];
+    transit.push({i,j,w}); transit.push({i:j,j:i,w}); sumT+=2*w;
+  });
+  transit.forEach(o=>o.w/=sumT);
+
+  return { work, base, transit };
+}
+const GRAV = precomputeGravity(GRAPH);
+
+/** Construit la matrice O-D (liste {i,j,demand}) pour l'heure et l'état donnés. */
+function buildOD(graph, s, hour){
+  const tele = s.tele/100, dem = s.demand/100;
+  const teleworkFactor = 1 - 0.80*tele;        // le télétravail retire jusqu'à 80% des navettes "télétravaillables"
+  const od = new Map();                        // clé "i_j" -> demand
+  const add=(i,j,d)=>{ if(d<=0||i===j) return; const k=i+'_'+j; od.set(k,(od.get(k)||0)+d); };
+
+  // Navettes domicile<->travail (directionnelles via logique d'activités)
+  const w = SCALE.work * dem * teleworkFactor;
+  const fW = toWork(hour), fH = toHome(hour);
+  for(const o of GRAV.work){
+    add(o.i,o.j, o.w * w * fW);   // matin : domicile -> travail
+    add(o.j,o.i, o.w * w * fH);   // soir  : travail -> domicile
+  }
+  // Déplacements de base (achats/loisirs, symétriques)
+  const b = SCALE.base * dem * baseTrip(hour);
+  for(const o of GRAV.base) add(o.i,o.j, o.w * b);
+
+  // Transit inter-portes
+  const t = SCALE.transit * dem * transitP(hour);
+  for(const o of GRAV.transit) add(o.i,o.j, o.w * t);
+
+  // regroupe par origine pour l'affectation
+  const byOrigin = new Map();
+  let total=0;
+  for(const [k,d] of od){
+    const [i,j]=k.split('_').map(Number);
+    if(!byOrigin.has(i)) byOrigin.set(i,[]);
+    byOrigin.get(i).push({j,d}); total+=d;
+  }
+  return { byOrigin, total };
+}
+
+/* ====================== AFFECTATION : DIJKSTRA + INCRÉMENTAL ====================== */
+
+/** Tas binaire minimal (clé = distance). */
+class MinHeap{
+  constructor(){ this.a=[]; }
+  get size(){ return this.a.length; }
+  push(node,dist){ const a=this.a; a.push({node,dist}); let i=a.length-1;
+    while(i>0){ const p=(i-1)>>1; if(a[p].dist<=a[i].dist)break; [a[p],a[i]]=[a[i],a[p]]; i=p; } }
+  pop(){ const a=this.a; const top=a[0], last=a.pop();
+    if(a.length){ a[0]=last; let i=0; const n=a.length;
+      while(true){ let l=2*i+1,r=2*i+2,m=i;
+        if(l<n&&a[l].dist<a[m].dist)m=l; if(r<n&&a[r].dist<a[m].dist)m=r;
+        if(m===i)break; [a[m],a[i]]=[a[i],a[m]]; i=m; } }
+    return top; }
+}
+
+/** Dijkstra un-vers-tous sur les coûts BPR courants (arc.time). */
+function dijkstra(graph, source){
+  const N=graph.nodes.length;
+  const dist=new Float64Array(N).fill(Infinity);
+  const prevArc=new Int32Array(N).fill(-1);
+  const done=new Uint8Array(N);
+  dist[source]=0;
+  const h=new MinHeap(); h.push(source,0);
+  while(h.size){
+    const {node:u,dist:du}=h.pop();
+    if(done[u])continue; done[u]=1;
+    for(const e of graph.adj[u]){
+      const arc=graph.arcs[e.arc];
+      const nd=du+arc.time;
+      if(nd<dist[e.to]){ dist[e.to]=nd; prevArc[e.to]=arc.id; h.push(e.to,nd); }
+    }
+  }
+  return { dist, prevArc };
+}
+
+/** Affectation incrémentale (approx. équilibre usager). Renvoie le graphe chargé. */
+function assign(graph, od, coefs){
+  prepareArcs(graph, coefs);
+  // coûts initiaux = flux libre
+  for(const arc of graph.arcs) arc.time = arc.t0;
+
+  for(const frac of PARAMS.INCREMENTS){
+    // recalcul des coûts BPR à partir des volumes courants
+    for(const arc of graph.arcs) arc.time = bpr(arc.t0, arc.vol, arc.cap, coefs.beta);
+    // une exécution Dijkstra par origine, puis chargement de la tranche
+    for(const [origin, dests] of od.byOrigin){
+      const {prevArc} = dijkstra(graph, origin);
+      for(const {j,d} of dests){
+        if(prevArc[j]<0 && j!==origin) continue;          // inatteignable
+        const load = d*frac;
+        let cur=j, guard=0;
+        while(cur!==origin && guard++<512){
+          const aid=prevArc[cur]; if(aid<0)break;
+          graph.arcs[aid].vol += load;
+          cur=graph.arcs[aid].from;
+        }
+      }
+    }
+  }
+  // coûts finaux + temps de parcours
+  for(const arc of graph.arcs) arc.time = bpr(arc.t0, arc.vol, arc.cap, coefs.beta);
+  return graph;
+}
+
+/* ====================== AGRÉGATION PAR TRONÇON & KPIs ====================== */
+
+/** État synthétique d'un tronçon (somme des 2 sens, V/C = max directionnel). */
+function segState(graph, seg, coefs){
+  const f=graph.arcs[seg.arcF], b=graph.arcs[seg.arcB];
+  const volTot=f.vol+b.vol;
+  const vcF=f.vol/f.cap, vcB=b.vol/b.cap, vc=Math.max(vcF,vcB);
+  const volMax=Math.max(f.vol,b.vol);
+  const timeMax=Math.max(f.time,b.time);
+  const gs=greenshields(volMax, f.cap, f.vfree);
+  const speed = seg.lengthKm/ Math.max(timeMax,1e-6);   // vitesse BPR sens chargé
+  return { volTot, volMax, vc, vcF, vcB, speed:Math.min(speed,f.vfree), density:gs.k, kjam:gs.kjam, cap:f.cap, vfree:f.vfree, timeMax };
+}
+
+/** KPIs réseau à partir d'un graphe affecté. */
+function computeKPIs(graph, coefs, odTotal){
+  let VKT=0, VHT=0, VHT0=0, satKm=0, totalKm=0, co2=0, congVKT=0;
+  const catKm={A:0,N:0,D:0};            // km congestionnés (V/C>0.8) par catégorie
+  const catVKT={A:0,N:0,D:0};           // véh·km par catégorie (répartition)
+  for(const seg of graph.segments){
+    const st=segState(graph,seg,coefs);
+    const L=seg.lengthKm;
+    totalKm+=L;
+    // par sens pour VKT/VHT (les 2 arcs)
+    [graph.arcs[seg.arcF],graph.arcs[seg.arcB]].forEach(arc=>{
+      VKT += arc.vol*L;
+      VHT += arc.vol*arc.time;
+      VHT0+= arc.vol*arc.t0;
+      const vGS = greenshields(arc.vol,arc.cap,arc.vfree).v;
+      const vBPR= L/Math.max(arc.time,1e-6);
+      const vEff= Math.min(vBPR,arc.vfree);
+      co2 += arc.vol*L*emissionFactor(0.5*(vEff+vGS), arc.vol/arc.cap)/1000;  // kg/h
+      catVKT[seg.cat]+=arc.vol*L;
+    });
+    if(st.vc>0.8){ satKm+=L; catKm[seg.cat]+=L; congVKT += st.volTot*L; }
+  }
+  const meanSpeed = VKT/Math.max(VHT,1e-6);
+  const delayVehH = VHT-VHT0;                                    // véh·h perdues / h
+  const meanDelayMin = odTotal>0 ? (delayVehH/odTotal)*60 : 0;   // min / conducteur
+  const congIndex = VKT>0 ? 100*congVKT/Math.max(VKT,1e-6) : 0;  // % de véh·km congestionnés
+  return {
+    meanSpeed, delayVehH, meanDelayMin, VKT, VHT,
+    satKm, totalKm, satPct:100*satKm/Math.max(totalKm,1e-6),
+    co2, co2PerKm: VKT>0? 1000*co2/VKT:0,
+    congIndex, demand:odTotal, catKm, catVKT,
+    freeSpeed: VKT>0 ? VKT/Math.max(VHT0,1e-6) : 0
+  };
+}
+
+/** Lance la simulation complète pour une heure donnée et renvoie {kpis}. (sans toucher au rendu) */
+function simulateHour(hour, s){
+  const coefs=behaviorCoefs(s);
+  const od=buildOD(GRAPH, s, hour);
+  assign(GRAPH, od, coefs);
+  return { kpis:computeKPIs(GRAPH,coefs,od.total), coefs, odTotal:od.total };
+}
+
+/** Profil 24h (vitesse + congestion) — relance le modèle pour chaque heure pleine. */
+function compute24h(s){
+  const speed=[], cong=[], hours=[];
+  for(let h=0;h<24;h++){
+    const r=simulateHour(h,s);
+    hours.push(h); speed.push(+r.kpis.meanSpeed.toFixed(1)); cong.push(+r.kpis.congIndex.toFixed(1));
+  }
+  return { hours, speed, cong };
+}
+
+/* ====================== RENDU CARTOGRAPHIQUE (Leaflet) ====================== */
+const MapView = (()=>{
+  let map, segLayer, nodeLayer, labelLayer, outlineLayer;
+  const segPolys=[];
+  let hoveredSeg=-1;          // tronçon survolé (pour highlight + tooltip live)
+  let curCoefs=null, curState=null;
+
+  /* Palette identique à la charte cartographique (cohérence carte / graphiques) */
+  const VC  = vc => vc<0.4?'#22c55e': vc<0.8?'#f59e0b': vc<=1.0?'#ef4444':'#a21caf';
+  const SPD = r  => r>0.8?'#22c55e': r>0.55?'#84cc16': r>0.35?'#f59e0b': r>0.18?'#ef4444':'#a21caf';
+  const levelTxt = vc => vc>1?'Asphyxie': vc>0.8?'Congestion': vc>0.4?'Dense':'Fluide';
+
+  const colorFor  = (st,disp)=> disp==='vitesse' ? SPD(st.speed/Math.max(st.vfree,1)) : VC(st.vc);
+  const weightFor = (st,disp)=> disp==='volume' ? clamp(2 + st.volTot/420, 2.5, 17)
+                                                : clamp(2.4 + st.volMax/300, 2.4, 14);
+
+  /** PERF : applique le style d'un tronçon UNIQUEMENT via setStyle (aucune manipulation du DOM). */
+  function styleSegment(seg, hover){
+    if(!curCoefs) return;
+    const st=segState(GRAPH,seg,curCoefs);
+    const disp=curState?curState.display:'charge';
+    let w=weightFor(st,disp);
+    if(hover) w+=3.5;
+    segPolys[seg.id].setStyle({ color:colorFor(st,disp), weight:w, opacity: hover?1:(st.vc>0.8?0.96:0.86) });
+  }
+
+  /** Mini-infobulle de survol : nom de la route + taux de charge instantané. */
+  function tipHtml(seg){
+    const st=segState(GRAPH,seg,curCoefs||behaviorCoefs(Store.state));
+    const color=VC(st.vc);
+    return `<div class="rt-name"><span class="cat-pill cat-${seg.cat}">${seg.cat}</span> ${seg.name}</div>
+      <div class="rt-row"><span class="rt-dot" style="background:${color}"></span>
+      V/C <b style="color:${color}">${fr2.format(st.vc)}</b> · ${levelTxt(st.vc)} · ${fr0.format(st.speed)} km/h</div>`;
+  }
+  /** Popup détaillé (au clic). */
+  function popupHtml(seg){
+    const c=curCoefs||behaviorCoefs(Store.state);
+    const st=segState(GRAPH,seg,c);
+    const f=GRAPH.arcs[seg.arcF], b=GRAPH.arcs[seg.arcB];
+    const color=VC(st.vc);
+    return `<div class="popup-h"><i class="fa-solid fa-road" style="color:${color}"></i> ${seg.name}
+        <span class="cat-pill cat-${seg.cat}">${seg.cat}</span></div>
+      <div class="popup-grid">
+        <span class="k">Catégorie</span><span class="v">${CAT[seg.cat].label}</span>
+        <span class="k">V. réglementaire</span><span class="v">${seg.vlim} km/h</span>
+        <span class="k">Longueur (tracé réel)</span><span class="v">${fr1.format(seg.lengthKm)} km</span>
+        <span class="k">Capacité / sens</span><span class="v">${fr0.format(f.cap)} véh/h</span>
+        <span class="k">Volume (→ / ←)</span><span class="v">${fr0.format(f.vol)} / ${fr0.format(b.vol)}</span>
+        <span class="k">Taux charge V/C</span><span class="v" style="color:${color}">${fr2.format(st.vc)} · ${levelTxt(st.vc)}</span>
+        <span class="k">Vitesse réelle</span><span class="v">${fr0.format(st.speed)} km/h</span>
+        <span class="k">Densité (Greenshields)</span><span class="v">${fr0.format(st.density)} véh/km</span>
+        <span class="k">Temps de parcours</span><span class="v">${fr1.format(st.timeMax*60)} min</span>
+      </div>`;
+  }
+
+  function init(){
+    // preferCanvas:true => tous les vecteurs sur un même canvas (fluidité 60 FPS)
+    map=L.map('map',{zoomControl:true, attributionControl:true, preferCanvas:true});
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+      attribution:'&copy; OpenStreetMap &copy; CARTO — CentrO-Flux 28 · contour © france-geojson', subdomains:'abcd', maxZoom:18
+    }).addTo(map);
+
+    outlineLayer=L.layerGroup().addTo(map);   // contour département (dessous)
+    segLayer=L.layerGroup().addTo(map);        // tronçons
+    nodeLayer=L.layerGroup().addTo(map);       // nœuds
+    labelLayer=L.layerGroup().addTo(map);      // étiquettes (DOM)
+
+    // Contour réel de l'Eure-et-Loir
+    L.polygon(DEPT_OUTLINE, {color:'#38bdf8', weight:1.3, opacity:.4, fill:true,
+      fillColor:'#0ea5e9', fillOpacity:.035, interactive:false, dashArray:'3 7'}).addTo(outlineLayer);
+
+    // Tronçons (créés une fois, restylés ensuite). Tracés réels = seg.latlngs (polyligne).
+    GRAPH.segments.forEach(seg=>{
+      const pl=L.polyline(seg.latlngs,{color:'#3b4660', weight:3, opacity:.85, lineCap:'round', lineJoin:'round'}).addTo(segLayer);
+      pl.bindTooltip('', {sticky:true, direction:'top', className:'road-tip', opacity:1});
+      pl.on('mouseover',()=>{ hoveredSeg=seg.id; pl.setTooltipContent(tipHtml(seg)); styleSegment(seg,true); });
+      pl.on('mouseout', ()=>{ if(hoveredSeg===seg.id)hoveredSeg=-1; styleSegment(seg,false); });
+      pl.on('click',    ()=>{ pl.bindPopup(popupHtml(seg),{maxWidth:320, className:'road-popup'}).openPopup(); });
+      segPolys[seg.id]=pl;
+    });
+
+    // Nœuds
+    GRAPH.nodes.forEach(n=>{
+      const porte=n.type==='porte';
+      const m=L.circleMarker([n.lat,n.lng],{
+        radius: porte?6:(n.pop>20000?8:n.pop>8000?6:4.5),
+        color:'#fff', weight:1.6, fillColor:porte?'#fbbf24':'#38bdf8', fillOpacity:.95
+      }).addTo(nodeLayer);
+      m.bindPopup(`<div class="popup-h">${porte?'<i class="fa-solid fa-right-to-bracket" style="color:#fbbf24"></i>':'<i class="fa-solid fa-location-dot" style="color:#38bdf8"></i>'} ${n.name}</div>
+        <div class="popup-grid">
+          ${porte?'<span class="k">Type</span><span class="v">Verrou de transit</span>'
+                 :`<span class="k">Population</span><span class="v">${fr0.format(n.pop)}</span><span class="k">Emplois</span><span class="v">${fr0.format(n.jobs)}</span>`}
+        </div>`);
+      L.marker([n.lat,n.lng],{icon:L.divIcon({className:'node-label'+(porte?' porte':''),html:n.name,iconSize:[0,0],iconAnchor:[-9,6]}),interactive:false}).addTo(labelLayer);
+    });
+
+    // Cadrage automatique (Fit Bounds) sur l'emprise réelle du département
+    fit();
+    setTimeout(()=>{ map.invalidateSize(); fit(); }, 280);     // robustesse au 1er rendu / resize
+  }
+
+  function fit(){ map.fitBounds(L.latLngBounds(DEPT_OUTLINE), {padding:[26,26]}); }
+
+  function render(graph, coefs, state){
+    curCoefs=coefs; curState=state;
+    for(const seg of graph.segments) styleSegment(seg, seg.id===hoveredSeg);
+    if(hoveredSeg>=0 && segPolys[hoveredSeg]) segPolys[hoveredSeg].setTooltipContent(tipHtml(graph.segments[hoveredSeg]));
+    state.labels? map.addLayer(labelLayer): map.removeLayer(labelLayer);
+  }
+  return { init, render, fit };
+})();
+
+/* ====================== RENDU CHARTS (Chart.js) ====================== */
+const Charts = (()=>{
+  let c24, cBar, cDough;
+  const gridC='rgba(148,180,255,.08)', tick='#6b7a9c';
+  Chart.defaults.font.family="Inter, sans-serif";
+  Chart.defaults.color=tick;
+  Chart.defaults.animation.duration=220;           // animations adoucies
+  Chart.defaults.animation.easing='easeOutQuart';
+
+  /* Dégradés verticaux calés sur la charte du taux de charge (Vert→Orange→Rouge→Violet). */
+  const STOP_SPEED=[[0,'#22c55e'],[0.34,'#84cc16'],[0.6,'#f59e0b'],[0.82,'#ef4444'],[1,'#a21caf']]; // haut=rapide(vert)
+  const STOP_CONG =[[0,'#a21caf'],[0.2,'#ef4444'],[0.5,'#f59e0b'],[1,'#22c55e']];                    // haut=congestionné(violet)
+  const STOP_FILL =[[0,'rgba(34,197,94,.20)'],[0.6,'rgba(245,158,11,.10)'],[1,'rgba(162,28,175,.02)']];
+  function vgrad(chart, stops){
+    const a=chart.chartArea; if(!a) return stops[0][1];
+    const g=chart.ctx.createLinearGradient(0,a.top,0,a.bottom);
+    stops.forEach(([o,c])=>g.addColorStop(o,c)); return g;
+  }
+  /** Mode d'update : 'none' (instantané) pendant une interaction, sinon animé. */
+  const mode = ()=> (typeof INTERACTING!=='undefined' && INTERACTING) ? 'none' : undefined;
+
+  function init(){
+    // 1) Profil 24h (vitesse + congestion) — courbes en dégradé harmonisé
+    c24=new Chart($('chart24'),{
+      data:{ labels:[...Array(24).keys()].map(h=>String(h).padStart(2,'0')+'h'),
+        datasets:[
+          {type:'line', label:'Vitesse moy. (km/h)', yAxisID:'y', data:[],
+           borderColor:ctx=>vgrad(ctx.chart,STOP_SPEED), backgroundColor:ctx=>vgrad(ctx.chart,STOP_FILL),
+           fill:true, tension:.4, borderWidth:2.6, pointRadius:0, pointHoverRadius:4},
+          {type:'line', label:'Congestion (%)', yAxisID:'y1', data:[],
+           borderColor:ctx=>vgrad(ctx.chart,STOP_CONG), backgroundColor:'transparent',
+           fill:false, tension:.4, borderWidth:2, borderDash:[5,4], pointRadius:0, pointHoverRadius:4}
+        ]},
+      options:baseOpts({dualAxis:true})
+    });
+    // 2) km congestionnés / catégorie
+    cBar=new Chart($('chartBar'),{
+      type:'bar',
+      data:{ labels:['Autoroute','Nationale','Départementale'],
+        datasets:[{label:'km saturés (V/C>0,8)', data:[0,0,0],
+          backgroundColor:['rgba(56,189,248,.6)','rgba(129,140,248,.6)','rgba(203,213,225,.5)'],
+          borderColor:['#38bdf8','#818cf8','#cbd5e1'], borderWidth:1.4, borderRadius:7}]},
+      options:baseOpts({})
+    });
+    // 3) répartition véh·km / type
+    cDough=new Chart($('chartDough'),{
+      type:'doughnut',
+      data:{ labels:['Autoroute (A)','Nationale (N)','Départementale (D)'],
+        datasets:[{data:[1,1,1], backgroundColor:['#38bdf8','#818cf8','#94a3b8'],
+          borderColor:'rgba(7,11,20,.9)', borderWidth:3, hoverOffset:6}]},
+      options:{ responsive:true, maintainAspectRatio:false, cutout:'62%',
+        plugins:{ legend:{position:'bottom', labels:{boxWidth:11,boxHeight:11,padding:11,font:{size:11}}},
+          tooltip:{callbacks:{label:c=>` ${c.label}: ${fr1.format(c.parsed)} %`}} } }
+    });
+  }
+  function baseOpts({dualAxis}){
+    const o={ responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{ legend:{display:true, labels:{boxWidth:11,boxHeight:11,padding:9,font:{size:10.5}}},
+        tooltip:{backgroundColor:'rgba(11,17,32,.95)',borderColor:'rgba(148,180,255,.2)',borderWidth:1,padding:10} },
+      scales:{
+        x:{grid:{color:gridC},ticks:{font:{size:9},maxRotation:0,autoSkip:true,maxTicksLimit:9}},
+        y:{grid:{color:gridC},ticks:{font:{size:9.5}},beginAtZero:true}
+      } };
+    if(dualAxis){
+      o.scales.y.title={display:true,text:'km/h',font:{size:9}};
+      o.scales.y1={position:'right',grid:{drawOnChartArea:false},ticks:{font:{size:9.5}},beginAtZero:true,max:100,title:{display:true,text:'%',font:{size:9}}};
+    }
+    return o;
+  }
+  function update24(prof, hour){
+    c24.data.datasets[0].data=prof.speed;
+    c24.data.datasets[1].data=prof.cong;
+    // surbrillance de l'heure courante
+    const hi=Math.round(hour)%24;
+    const pr=prof.hours.map(h=>h===hi?5:0);
+    c24.data.datasets[0].pointRadius=pr;
+    c24.data.datasets[0].pointBackgroundColor=prof.hours.map(h=>h===hi?'#ffffff':'rgba(0,0,0,0)');
+    c24.data.datasets[1].pointRadius=pr;
+    c24.data.datasets[1].pointBackgroundColor=prof.hours.map(h=>h===hi?'#ffffff':'rgba(0,0,0,0)');
+    c24.update(mode());
+  }
+  function updateBar(catKm){ cBar.data.datasets[0].data=[+catKm.A.toFixed(1),+catKm.N.toFixed(1),+catKm.D.toFixed(1)]; cBar.update(mode()); }
+  function updateDough(catVKT){
+    const tot=catVKT.A+catVKT.N+catVKT.D||1;
+    cDough.data.datasets[0].data=[100*catVKT.A/tot,100*catVKT.N/tot,100*catVKT.D/tot].map(x=>+x.toFixed(1));
+    cDough.update(mode());
+  }
+  return { init, update24, updateBar, updateDough };
+})();
+
+/* ====================== TOASTS & FLUX D'ÉVÉNEMENTS ====================== */
+function toast(title,msg,type='info',ms=4200){
+  const ic={ok:'fa-circle-check',warn:'fa-triangle-exclamation',err:'fa-circle-xmark',info:'fa-circle-info'}[type];
+  const el=document.createElement('div'); el.className='toast '+type;
+  el.innerHTML=`<i class="fa-solid ${ic}"></i><div><div class="tt">${title}</div><div class="tm">${msg}</div></div>`;
+  $('toasts').appendChild(el);
+  setTimeout(()=>{ el.classList.add('out'); setTimeout(()=>el.remove(),300); }, ms);
+}
+
+/* Mémoire d'état des tronçons pour détecter les franchissements de seuil */
+const Events = (()=>{
+  const prev={};        // seg.id -> niveau précédent (0..3)
+  const list=[];
+  const levelOf=vc=> vc>1?3: vc>0.8?2: vc>0.4?1:0;
+  function timeStr(h){ const m=Math.round((h%1)*60); return String(Math.floor(h)%24).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
+
+  function push(kind,html){
+    list.unshift({kind,html,t:Date.now()});
+    if(list.length>26) list.pop();
+    render();
+  }
+  function render(){
+    const c=$('events');
+    if(!list.length){ c.innerHTML=`<div class="ev info"><i class="fa-solid fa-circle-info"></i><div>Réseau nominal — aucun point de blocage signalé.</div></div>`; return; }
+    c.innerHTML=list.map(e=>`<div class="ev ${e.kind}">${e.html}</div>`).join('');
+  }
+
+  /** Analyse l'état courant + une projection h+1 pour détecter blocages & saturations imminentes. */
+  function scan(graph, coefs, state, kpis){
+    const hour=state.hour;
+    let newCrit=0, newWarn=0;
+    graph.segments.forEach(seg=>{
+      const st=segState(graph,seg,coefs);
+      const lv=levelOf(st.vc);
+      const was=prev[seg.id]??0;
+      if(lv>was){
+        const sens = st.vcF>=st.vcB? '→':'←';
+        if(lv===3){ push('asphyx',`<i class="fa-solid fa-skull-crossbones"></i><div><span class="et">${timeStr(hour)} · ASPHYXIE</span><br>Blocage critique <b>${seg.name}</b> (V/C ${fr2.format(st.vc)}). Itinéraire reporté sur le réseau secondaire.</div>`); newCrit++; }
+        else if(lv===2){ push('crit',`<i class="fa-solid fa-circle-exclamation"></i><div><span class="et">${timeStr(hour)} · CONGESTION</span><br>Saturation de <b>${seg.name}</b> sens ${sens} (V/C ${fr2.format(st.vc)}).</div>`); newCrit++; }
+        else if(lv===1 && was===0){ push('warn',`<i class="fa-solid fa-triangle-exclamation"></i><div><span class="et">${timeStr(hour)} · DENSE</span><br>Trafic dense sur <b>${seg.name}</b> (V/C ${fr2.format(st.vc)}).</div>`); }
+      } else if(lv<was && lv<=1){
+        if(was>=2) push('ok',`<i class="fa-solid fa-circle-check"></i><div><span class="et">${timeStr(hour)} · RÉSORPTION</span><br>Retour à un trafic fluide sur <b>${seg.name}</b>.</div>`);
+      }
+      prev[seg.id]=lv;
+    });
+
+    // Projection h+1 : saturations imminentes (sans polluer prev)
+    const future=hour+1;
+    const fr=simulateHour(future, state);   // recharge GRAPH sur h+1
+    const warns=[];
+    GRAPH.segments.forEach(seg=>{
+      const st=segState(GRAPH,seg,fr.coefs);
+      if(st.vc>0.9 && (prev[seg.id]??0)<2) warns.push({seg,vc:st.vc});
+    });
+    // restaure l'état courant du graphe
+    assign(GRAPH, buildOD(GRAPH,state,hour), coefs);
+    warns.sort((a,b)=>b.vc-a.vc).slice(0,1).forEach(w=>{
+      push('warn',`<i class="fa-solid fa-clock-rotate-left"></i><div><span class="et">PRÉVISION ${timeStr(future)}</span><br>Saturation imminente attendue sur <b>${w.seg.name}</b> (V/C projeté ${fr2.format(w.vc)}).</div>`);
+    });
+
+    if(newCrit>0 && hour>=6.5 && hour<=9.5) toast('Pointe matinale','Saturations multiples détectées sur les axes vers Chartres / Île-de-France.','warn');
+  }
+  function reset(){ list.length=0; for(const k in prev) delete prev[k]; render(); }
+  return { scan, render, reset };
+})();
+
+/* ====================== RENDU UI / KPIs ====================== */
+function periodLabel(h){
+  if(h>=6.5&&h<9.5)  return {t:'Heure de pointe matinale', tag:'POINTE AM'};
+  if(h>=16.5&&h<19.5)return {t:'Heure de pointe du soir',  tag:'POINTE PM'};
+  if(h>=9.5&&h<16.5) return {t:'Trafic de journée',        tag:'CREUX JOUR'};
+  if(h>=19.5&&h<22)  return {t:'Trafic de soirée',         tag:'SOIRÉE'};
+  return {t:'Trafic nocturne', tag:'NUIT'};
+}
+function hhmm(h){ const m=Math.round((h%1)*60); return String(Math.floor(h)).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
+
+function flash(el){ el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+
+function renderKPIs(k, state){
+  $('kpiSpeed').innerHTML=`${fr0.format(k.meanSpeed)} <small>km/h</small>`;
+  $('kpiSpeedT').textContent=`flux libre théorique : ${fr0.format(k.freeSpeed)} km/h`;
+  $('kpiDelay').innerHTML=`${fr0.format(k.delayVehH)} <small>véh·h/h</small>`;
+  $('kpiDelayT').textContent=`soit ${fr1.format(k.meanDelayMin)} min / conducteur`;
+  $('kpiFlow').innerHTML=`${fr0.format(k.demand)} <small>véh/h</small>`;
+  $('kpiFlowT').textContent=`parcours : ${fr0.format(k.VKT)} véh·km/h`;
+  $('kpiCo2').innerHTML=`${fr0.format(k.co2)} <small>kg/h</small>`;
+  $('kpiCo2T').textContent=`≈ ${fr0.format(k.co2PerKm)} g/véh·km`;
+  $('kpiSat').innerHTML=`${fr1.format(k.satKm)} <small>km</small>`;
+  $('kpiSatT').textContent=`${fr1.format(k.satPct)} % des voies`;
+
+  $('miniDelay').textContent=fr1.format(k.meanDelayMin);
+  $('miniCong').textContent=fr1.format(k.congIndex);
+  $('miniSpeed').textContent=fr0.format(k.meanSpeed);
+  $('miniCo2').textContent=fr2.format(k.co2/1000);
+  [ 'kpiSpeed','kpiDelay','kpiFlow','kpiCo2','kpiSat' ].forEach(id=>flash($(id)));
+}
+
+/* ====================== ORCHESTRATION ====================== */
+let lastSig=null;   // signature des paramètres hors-heure (pour recalcul du profil 24h)
+let prof24Timer=null;
+function paramSig(s){ return [s.behavior,s.agg,s.respect,s.tele,s.demand].join('|'); }
+
+/** Recalcule le profil 24h (coûteux) puis restaure le graphe sur l'heure courante. */
+function recomputeProfile(){
+  const s=Store.state;
+  window._prof24=compute24h(s);
+  const coefs=behaviorCoefs(s);
+  assign(GRAPH, buildOD(GRAPH,s,s.hour), coefs);   // restaure l'état courant après le balayage 24h
+  Charts.update24(window._prof24,s.hour);
+}
+/** Recalcul différé (anti-jank pendant le glissement des sliders). */
+function scheduleProfile(){ if(prof24Timer)clearTimeout(prof24Timer); prof24Timer=setTimeout(recomputeProfile,130); }
+
+function runFull(){
+  const s=Store.state;
+  const coefs=behaviorCoefs(s);
+  const od=buildOD(GRAPH,s,s.hour);
+  assign(GRAPH,od,coefs);
+  const kpis=computeKPIs(GRAPH,coefs,od.total);
+
+  // rendu
+  MapView.render(GRAPH,coefs,s);
+  renderKPIs(kpis,s);
+  Charts.updateBar(kpis.catKm);
+  Charts.updateDough(kpis.catVKT);
+
+  // profil 24h : recalcul différé si les paramètres hors-heure changent ; sinon simple repositionnement du marqueur
+  const sig=paramSig(s);
+  if(sig!==lastSig){ lastSig=sig; scheduleProfile(); }
+  if(window._prof24) Charts.update24(window._prof24,s.hour);
+
+  // événements
+  Events.scan(GRAPH,coefs,s,kpis);
+
+  // actifs mobiles
+  $('popAct').textContent=fr0.format(od.total);
+}
+
+/* debounce via requestAnimationFrame */
+let raf=null;
+function scheduleRun(){ if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(()=>{ raf=null; runFull(); }); }
+
+/* État d'interaction : pendant le glissement d'un slider, les graphiques se mettent à
+   jour sans animation (anti micro-gel) ; 200 ms après le dernier mouvement, un
+   rafraîchissement animé adouci est déclenché. */
+let INTERACTING=false, settleTimer=null;
+function markInteract(){
+  INTERACTING=true;
+  if(settleTimer)clearTimeout(settleTimer);
+  settleTimer=setTimeout(()=>{ INTERACTING=false; runFull(); }, 200);
+}
+
+/* ====================== BINDINGS UI ====================== */
+function setRangeFill(el){ const min=+el.min,max=+el.max,v=+el.value; el.style.setProperty('--p',((v-min)/(max-min)*100)+'%'); }
+
+function bindUI(){
+  // sliders
+  const hour=$('hour'), agg=$('agg'), respect=$('respect'), tele=$('tele'), dem=$('dem');
+  // pendant le drag de n'importe quel slider : mode "instantané" pour les graphiques
+  document.querySelectorAll('input[type=range]').forEach(r=>r.addEventListener('input', markInteract));
+  function syncHour(){ const h=+hour.value; setRangeFill(hour);
+    $('hourV').textContent=hhmm(h); $('mapHour').textContent=hhmm(h);
+    const p=periodLabel(h); $('mapPeriod').textContent=p.t; $('periodTag').textContent=p.tag;
+    Store.set({hour:h});
+  }
+  hour.addEventListener('input', syncHour);
+  agg.addEventListener('input',()=>{ setRangeFill(agg); $('aggV').textContent=agg.value+' %'; Store.set({agg:+agg.value}); });
+  respect.addEventListener('input',()=>{ setRangeFill(respect); $('respectV').textContent=respect.value+' %'; Store.set({respect:+respect.value}); });
+  tele.addEventListener('input',()=>{ setRangeFill(tele); $('teleV').textContent=tele.value+' %'; Store.set({tele:+tele.value}); });
+  dem.addEventListener('input',()=>{ setRangeFill(dem); $('demV').textContent=dem.value+' %'; Store.set({demand:+dem.value}); });
+  [hour,agg,respect,tele,dem].forEach(setRangeFill);
+
+  // typologie comportement
+  const hints={
+    eco:"Distances de sécurité longues, anticipation : capacité d'écoulement réduite mais conduite apaisée et sobre.",
+    normal:"Comportement moyen de référence : capacités et vitesses réglementaires standard.",
+    agressif:"Distances courtes, dépassements : capacité accrue mais vitesses excessives et report de trafic plus nerveux."
+  };
+  $('behaviorSeg').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return;
+    [...e.currentTarget.children].forEach(x=>x.classList.toggle('on',x===b));
+    $('behaviorHint').textContent=hints[b.dataset.b];
+    Store.set({behavior:b.dataset.b});
+  });
+  // mode affichage
+  $('dispSeg').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return;
+    [...e.currentTarget.children].forEach(x=>x.classList.toggle('on',x===b));
+    Store.set({display:b.dataset.d});
+  });
+  // labels
+  $('chkLabels').addEventListener('change',e=>Store.set({labels:e.target.checked}));
+
+  // flux d'événements rétractable (libère de l'espace vertical pour les 3 graphiques)
+  $('evToggle').addEventListener('click',()=>{
+    const collapsed=$('eventsPanel').classList.toggle('collapsed');
+    $('rightScroll').classList.toggle('events-collapsed', collapsed);
+    // Chart.js (responsive) redimensionne automatiquement via ResizeObserver
+  });
+
+  // lecture / pas à pas
+  let timer=null;
+  function setPlaying(p){
+    Store.set({playing:p});
+    $('btnPlay').innerHTML = p?'<i class="fa-solid fa-pause"></i>':'<i class="fa-solid fa-play"></i>';
+    $('clockDot').classList.toggle('run',p);
+    if(p){ timer=setInterval(()=>{ let h=Store.state.hour+0.5; if(h>=24)h=0; hour.value=h; syncHour(); }, 850); toast('Simulation lancée','Défilement temps réel des 24 heures (pas de 30 min).','info',3000); }
+    else if(timer){ clearInterval(timer); timer=null; }
+  }
+  $('btnPlay').addEventListener('click',()=>setPlaying(!Store.state.playing));
+  $('btnStep').addEventListener('click',()=>{ if(Store.state.playing)setPlaying(false); let h=Store.state.hour+0.5; if(h>=24)h=0; hour.value=h; syncHour(); });
+
+  // méthodologie
+  $('btnMethodo').addEventListener('click',()=>$('methodoModal').classList.add('show'));
+  $('btnCloseMethodo').addEventListener('click',()=>$('methodoModal').classList.remove('show'));
+  $('methodoModal').addEventListener('click',e=>{ if(e.target===$('methodoModal'))$('methodoModal').classList.remove('show'); });
+
+  // reset
+  $('btnReset').addEventListener('click',()=>{
+    hour.value=8; agg.value=35; respect.value=75; tele.value=18; dem.value=100;
+    [hour,agg,respect,tele,dem].forEach(setRangeFill);
+    $('aggV').textContent='35 %'; $('respectV').textContent='75 %'; $('teleV').textContent='18 %'; $('demV').textContent='100 %';
+    [...$('behaviorSeg').children].forEach(x=>x.classList.toggle('on',x.dataset.b==='eco'));
+    $('behaviorHint').textContent=hints.eco;
+    [...$('dispSeg').children].forEach(x=>x.classList.toggle('on',x.dataset.d==='charge'));
+    $('chkLabels').checked=true;
+    Events.reset();
+    Store.set({hour:8,behavior:'eco',agg:35,respect:75,tele:18,demand:100,display:'charge',labels:true});
+    syncHour();
+    toast('Paramètres réinitialisés','Retour à la configuration de référence (08:00, conduite éco).','ok',3000);
+  });
+
+  // raccourci clavier espace = play
+  document.addEventListener('keydown',e=>{ if(e.code==='Space'&&e.target.tagName!=='INPUT'){ e.preventDefault(); $('btnPlay').click(); }});
+}
+
+/* ====================== INITIALISATION ====================== */
+function boot(){
+  $('popRef').textContent=fr0.format(PARAMS.DEPT_POP);
+  $('metaNodes').textContent=`${GRAPH.nodes.length} (${GRAPH.nodes.filter(n=>n.type==='ville').length} communes + ${GRAPH.nodes.filter(n=>n.type==='porte').length} verrous)`;
+  $('metaArcs').textContent=`${GRAPH.arcs.length} (${GRAPH.segments.length} tronçons × 2 sens)`;
+  const totPts=GRAPH.segments.reduce((a,s)=>a+s.latlngs.length,0);
+  const totKm=GRAPH.segments.reduce((a,s)=>a+s.lengthKm,0);
+  $('metaGeom').textContent=`${GRAPH.segments.length} polylignes réelles · ${totPts} sommets [lat,lng]`;
+  $('metaLin').textContent=`${fr0.format(totKm)} km (longueur issue des tracés)`;
+
+  MapView.init();
+  Charts.init();
+  bindUI();
+  Events.render();
+
+  Store.subscribe(scheduleRun);
+  // premier calcul : profil 24h synchrone (chart immédiatement rempli) puis rendu de l'heure courante
+  window._prof24=compute24h(Store.state);
+  lastSig=paramSig(Store.state);
+  runFull();
+  toast('CentrO-Flux 28 prêt','Réseau de l\'Eure-et-Loir chargé — modèle BPR + Greenshields opérationnel.','ok',4200);
+}
+
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot);
+else boot();
+</script>
+</body>
+</html>
